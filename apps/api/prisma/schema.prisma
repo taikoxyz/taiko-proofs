@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum BatchStatus {
@@ -29,6 +30,7 @@ model Batch {
   proofTxHash            String?    @map("proof_tx_hash") @db.VarChar(66)
   verifierAddress        String?    @map("verifier_address") @db.VarChar(42)
   proofSystems           ProofSystem[] @default([]) @map("proof_systems")
+  teeVerifiers           String[]   @default([]) @map("tee_verifiers")
   verifiedAt             DateTime?  @map("verified_at")
   verifiedBlock          BigInt?    @map("verified_block")
   status                 BatchStatus @default(proposed) @map("status")
@@ -51,6 +53,7 @@ model BatchProof {
   batchId               BigInt      @map("batch_id")
   verifierAddress       String      @map("verifier_address") @db.VarChar(42)
   proofSystems          ProofSystem[] @default([]) @map("proof_systems")
+  teeVerifiers          String[]    @default([]) @map("tee_verifiers")
   proofTxHash           String      @map("proof_tx_hash") @db.VarChar(66)
   provenAt              DateTime    @map("proven_at")
   provenBlock           BigInt      @map("proven_block")

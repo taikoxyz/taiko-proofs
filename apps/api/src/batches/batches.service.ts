@@ -2,7 +2,12 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { BatchesQueryDto } from "./batches.dto";
 import { addDays, parseDateRange } from "../common/date";
-import { BatchDetailResponse, BatchesResponse, BatchSummary } from "@taikoproofs/shared";
+import {
+  BatchDetailResponse,
+  BatchesResponse,
+  BatchSummary,
+  TeeVerifier
+} from "@taikoproofs/shared";
 import { AppConfigService } from "../config/app-config.service";
 import { Prisma } from "@prisma/client";
 
@@ -58,6 +63,7 @@ export class BatchesService {
       proposer: batch.proposer,
       status: batch.status,
       proofSystems: batch.proofSystems,
+      teeVerifiers: batch.teeVerifiers as TeeVerifier[],
       proposedAt: batch.proposedAt.toISOString(),
       provenAt: batch.provenAt?.toISOString() ?? null,
       verifiedAt: batch.verifiedAt?.toISOString() ?? null,
@@ -98,6 +104,7 @@ export class BatchesService {
         proposer: batch.proposer,
         status: batch.status,
         proofSystems: batch.proofSystems,
+        teeVerifiers: batch.teeVerifiers as TeeVerifier[],
         proposedAt: batch.proposedAt.toISOString(),
         provenAt: batch.provenAt?.toISOString() ?? null,
         verifiedAt: batch.verifiedAt?.toISOString() ?? null,

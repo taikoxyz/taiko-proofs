@@ -7,7 +7,8 @@ import {
   BatchDetailResponse,
   BatchStatus,
   BatchesResponse,
-  ProofSystem
+  ProofSystem,
+  TeeVerifier
 } from "@taikoproofs/shared";
 import { buildApiUrl, fetcher } from "../lib/api";
 import { formatDateTime } from "../lib/format";
@@ -27,6 +28,38 @@ const statusFilters: { label: string; value: BatchStatus | "all" }[] = [
 ];
 
 const systemFilters: ProofSystem[] = ["TEE", "SP1", "RISC0"];
+const teeLabels: Record<TeeVerifier, string> = {
+  SGX_GETH: "SGX GETH",
+  SGX_RETH: "SGX RETH"
+};
+
+function buildProofLabels(
+  proofSystems: ProofSystem[],
+  teeVerifiers?: TeeVerifier[]
+) {
+  const labels = new Set<string>();
+
+  for (const system of proofSystems) {
+    if (system === "TEE" && teeVerifiers?.length) {
+      for (const tee of teeVerifiers) {
+        labels.add(`TEE ${teeLabels[tee] ?? tee}`);
+      }
+      continue;
+    }
+
+    labels.add(system);
+  }
+
+  return Array.from(labels);
+}
+
+function formatProofSystems(
+  proofSystems: ProofSystem[],
+  teeVerifiers?: TeeVerifier[]
+) {
+  const labels = buildProofLabels(proofSystems, teeVerifiers);
+  return labels.length ? labels.join(", ") : "—";
+}
 
 export default function BatchesView({ range }: BatchesViewProps) {
   const [status, setStatus] = useState<BatchStatus | "all">("all");
@@ -147,14 +180,16 @@ export default function BatchesView({ range }: BatchesViewProps) {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
                     {batch.proofSystems.length ? (
-                      batch.proofSystems.map((system) => (
-                        <span
-                          key={system}
-                          className="rounded-full border border-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70"
-                        >
-                          {system}
-                        </span>
-                      ))
+                      buildProofLabels(batch.proofSystems, batch.teeVerifiers).map(
+                        (label, index) => (
+                          <span
+                            key={`${batch.batchId}-${label}-${index}`}
+                            className="rounded-full border border-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70"
+                          >
+                            {label}
+                          </span>
+                        )
+                      )
                     ) : (
                       <span className="text-white/40">—</span>
                     )}
@@ -259,7 +294,10 @@ function BatchDrawer({
         <div className="mt-6 space-y-4 text-sm text-white/70">
           <DetailRow label="Proposer" value={batch.proposer} />
           <DetailRow label="Status" value={batch.status} />
-          <DetailRow label="Proof Systems" value={batch.proofSystems.join(", ") || "—"} />
+          <DetailRow
+            label="Proof Systems"
+            value={formatProofSystems(batch.proofSystems, batch.teeVerifiers)}
+          />
           <DetailRow label="Proposed" value={formatDateTime(batch.proposedAt)} />
           <DetailRow label="Proven" value={formatDateTime(batch.provenAt)} />
           <DetailRow label="Verified" value={formatDateTime(batch.verifiedAt)} />

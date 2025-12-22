@@ -6,7 +6,7 @@ import { AppConfigService } from "../config/app-config.service";
 import { taikoInboxAbi } from "../chain/taikoInboxAbi";
 import { ProofClassifierService } from "./proof-classifier.service";
 import { StatsService } from "../stats/stats.service";
-import { ProofSystem } from "@taikoproofs/shared";
+import { ProofSystem, TeeVerifier } from "@taikoproofs/shared";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -89,6 +89,7 @@ export class IndexerService {
       });
     }
 
+    await this.backfillMissingEvents(fromBlock, safeBlock);
     await this.stats.refreshDailyStats(this.config.statsLookbackDays);
 
     return { fromBlock, toBlock: safeBlock, processed };
@@ -192,6 +193,7 @@ export class IndexerService {
         provenBlock: null,
         proofTxHash: null,
         proofSystems: { set: [] },
+        teeVerifiers: { set: [] },
         verifierAddress: null,
         transitionParentHash: null,
         transitionBlockHash: null,
@@ -234,6 +236,7 @@ export class IndexerService {
         data: {
           status: batch.verifiedAt ? "verified" : "proposed",
           proofSystems: { set: [] },
+          teeVerifiers: { set: [] },
           proofTxHash: null,
           verifierAddress: null,
           provenAt: null,
@@ -254,6 +257,7 @@ export class IndexerService {
       data: {
         status: batch.verifiedAt ? "verified" : "proven",
         proofSystems: { set: selectedProof.proofSystems },
+        teeVerifiers: { set: selectedProof.teeVerifiers },
         proofTxHash: selectedProof.proofTxHash,
         verifierAddress: selectedProof.verifierAddress,
         provenAt: selectedProof.provenAt,
@@ -339,7 +343,7 @@ export class IndexerService {
     });
 
     const proofData = this.classifier.extractProofData(tx.input as `0x${string}`);
-    const proofSystems = await this.classifier.classifyProofSystems(
+    const { proofSystems, teeVerifiers } = await this.classifier.classifyProof(
       normalizedVerifier,
       proofData
     );
@@ -350,10 +354,11 @@ export class IndexerService {
       const batchId = BigInt(batchIds[i]);
       const transition = transitions[i];
 
-      await this.applyProofToBatch(
+      const { matchesVerified } = await this.applyProofToBatch(
         batchId,
         log.transactionHash,
         proofSystems,
+        teeVerifiers,
         normalizedVerifier,
         {
           provenAt,
@@ -363,6 +368,17 @@ export class IndexerService {
           transitionStateRoot: transition.stateRoot
         }
       );
+
+      const proofUpdate = {
+        proofSystems: { set: proofSystems },
+        teeVerifiers: { set: teeVerifiers },
+        provenAt,
+        provenBlock: BigInt(provenBlock),
+        transitionParentHash: transition.parentHash,
+        transitionBlockHash: transition.blockHash,
+        transitionStateRoot: transition.stateRoot,
+        ...(matchesVerified ? { isVerified: true } : {})
+      };
 
       await this.prisma.batchProof.upsert({
         where: {
@@ -375,21 +391,16 @@ export class IndexerService {
           batchId,
           verifierAddress: normalizedVerifier,
           proofSystems,
+          teeVerifiers,
           proofTxHash: log.transactionHash,
           provenAt,
           provenBlock: BigInt(provenBlock),
           transitionParentHash: transition.parentHash,
           transitionBlockHash: transition.blockHash,
-          transitionStateRoot: transition.stateRoot
+          transitionStateRoot: transition.stateRoot,
+          isVerified: matchesVerified
         },
-        update: {
-          proofSystems: { set: proofSystems },
-          provenAt,
-          provenBlock: BigInt(provenBlock),
-          transitionParentHash: transition.parentHash,
-          transitionBlockHash: transition.blockHash,
-          transitionStateRoot: transition.stateRoot
-        }
+        update: proofUpdate
       });
     }
   }
@@ -398,6 +409,7 @@ export class IndexerService {
     batchId: bigint,
     proofTxHash: string,
     proofSystems: ProofSystem[],
+    teeVerifiers: TeeVerifier[],
     verifierAddress: string,
     payload: {
       provenAt: Date;
@@ -406,7 +418,7 @@ export class IndexerService {
       transitionBlockHash: string;
       transitionStateRoot: string;
     }
-  ) {
+  ): Promise<{ matchesVerified: boolean }> {
     const existing = await this.prisma.batch.findUnique({
       where: { batchId }
     });
@@ -421,6 +433,7 @@ export class IndexerService {
           status: "proven",
           verifierAddress,
           proofSystems,
+          teeVerifiers,
           proofTxHash,
           provenAt: payload.provenAt,
           provenBlock: payload.provenBlock,
@@ -429,18 +442,38 @@ export class IndexerService {
           transitionStateRoot: payload.transitionStateRoot
         }
       });
-      return;
+      return { matchesVerified: false };
     }
 
+    const matchesVerified =
+      existing.status === "verified" &&
+      existing.transitionBlockHash === payload.transitionBlockHash;
+
     if (existing.status === "verified") {
-      return;
+      if (matchesVerified && !existing.proofTxHash) {
+        await this.prisma.batch.update({
+          where: { batchId },
+          data: {
+            proofSystems: { set: proofSystems },
+            teeVerifiers: { set: teeVerifiers },
+            proofTxHash,
+            verifierAddress,
+            provenAt: payload.provenAt,
+            provenBlock: payload.provenBlock,
+            transitionParentHash: payload.transitionParentHash,
+            transitionBlockHash: payload.transitionBlockHash,
+            transitionStateRoot: payload.transitionStateRoot
+          }
+        });
+      }
+      return { matchesVerified };
     }
 
     const shouldUpdateProof =
       !existing.provenAt || payload.provenAt < existing.provenAt;
 
     if (!shouldUpdateProof) {
-      return;
+      return { matchesVerified: false };
     }
 
     await this.prisma.batch.update({
@@ -449,6 +482,7 @@ export class IndexerService {
         status: "proven",
         verifierAddress,
         proofSystems: { set: proofSystems },
+        teeVerifiers: { set: teeVerifiers },
         proofTxHash,
         provenAt: payload.provenAt,
         provenBlock: payload.provenBlock,
@@ -457,6 +491,7 @@ export class IndexerService {
         transitionStateRoot: payload.transitionStateRoot
       }
     });
+    return { matchesVerified: false };
   }
 
   private async handleBatchesVerified(
@@ -495,12 +530,14 @@ export class IndexerService {
         proposer: ZERO_ADDRESS,
         status: "verified",
         verifiedAt,
-        verifiedBlock: BigInt(log.blockNumber)
+        verifiedBlock: BigInt(log.blockNumber),
+        transitionBlockHash: blockHash
       },
       update: {
         status: "verified",
         verifiedAt,
-        verifiedBlock: BigInt(log.blockNumber)
+        verifiedBlock: BigInt(log.blockNumber),
+        transitionBlockHash: blockHash
       }
     });
 
@@ -514,6 +551,7 @@ export class IndexerService {
         where: { batchId },
         data: {
           proofSystems: { set: proof.proofSystems },
+          teeVerifiers: { set: proof.teeVerifiers },
           proofTxHash: proof.proofTxHash,
           verifierAddress: proof.verifierAddress,
           provenAt: proof.provenAt,
@@ -548,6 +586,74 @@ export class IndexerService {
         isContested: true
       }
     });
+  }
+
+  private async findIncompleteBatches(
+    fromBlock: bigint,
+    toBlock: bigint
+  ): Promise<bigint[]> {
+    const rows = await this.prisma.batch.findMany({
+      where: {
+        status: { in: ["proven", "verified"] },
+        AND: [
+          { OR: [{ proofTxHash: null }, { proposer: ZERO_ADDRESS }] },
+          {
+            OR: [
+              { provenBlock: { gte: fromBlock, lte: toBlock } },
+              { verifiedBlock: { gte: fromBlock, lte: toBlock } }
+            ]
+          }
+        ]
+      },
+      select: { batchId: true }
+    });
+
+    return rows.map((row) => row.batchId);
+  }
+
+  private async backfillMissingEvents(
+    fromBlock: bigint,
+    toBlock: bigint
+  ): Promise<void> {
+    if (fromBlock <= 1n) {
+      return;
+    }
+
+    let missing = await this.findIncompleteBatches(fromBlock, toBlock);
+    if (!missing.length) {
+      return;
+    }
+
+    this.logger.warn(
+      `Backfilling ${missing.length} batch(es) missing proposal/proof events before block ${fromBlock}`
+    );
+
+    const chunkSize = BigInt(this.config.indexerChunkSize);
+    let cursor = fromBlock - 1n;
+    let ranges = 0;
+
+    while (cursor > 0n && missing.length) {
+      const backfillFrom =
+        cursor > chunkSize ? cursor - chunkSize + 1n : 0n;
+
+      await this.processRange(backfillFrom, cursor);
+      ranges += 1;
+
+      missing = await this.findIncompleteBatches(fromBlock, toBlock);
+
+      if (backfillFrom === 0n) {
+        break;
+      }
+      cursor = backfillFrom - 1n;
+    }
+
+    if (missing.length) {
+      this.logger.warn(
+        `Backfill still missing ${missing.length} batch(es) after scanning earlier ranges`
+      );
+    } else {
+      this.logger.log(`Backfill filled missing events after ${ranges} range(s).`);
+    }
   }
 
   private async getLogsSafe(

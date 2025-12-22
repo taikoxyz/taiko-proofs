@@ -7,7 +7,8 @@ import { VerifierRegistryService } from "../src/indexer/verifier-registry.servic
 const mockRegistry = {
   hasMappingFor: jest.fn(),
   hydrateComposeVerifier: jest.fn(),
-  getSystemsFor: jest.fn()
+  getSystemsFor: jest.fn(),
+  getTeeVerifiersFor: jest.fn()
 };
 
 describe("ProofClassifierService", () => {
@@ -78,6 +79,7 @@ describe("ProofClassifierService", () => {
   it("classifies proof systems using registry", async () => {
     mockRegistry.hasMappingFor.mockReturnValue(true);
     mockRegistry.getSystemsFor.mockReturnValue(["SP1"] as ProofSystem[]);
+    mockRegistry.getTeeVerifiersFor.mockReturnValue([]);
 
     const service = new ProofClassifierService(
       mockRegistry as unknown as VerifierRegistryService

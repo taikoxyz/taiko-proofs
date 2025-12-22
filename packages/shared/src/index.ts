@@ -1,4 +1,5 @@
 export type ProofSystem = "TEE" | "SP1" | "RISC0";
+export type TeeVerifier = "SGX_GETH" | "SGX_RETH";
 
 export type BatchStatus = "proposed" | "proven" | "verified";
 
@@ -7,6 +8,7 @@ export interface BatchSummary {
   proposer: string;
   status: BatchStatus;
   proofSystems: ProofSystem[];
+  teeVerifiers?: TeeVerifier[];
   proposedAt: string;
   provenAt?: string | null;
   verifiedAt?: string | null;

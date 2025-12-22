@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ProofSystem } from "@taikoproofs/shared";
+import { ProofSystem, TeeVerifier } from "@taikoproofs/shared";
 import { decodeAbiParameters, decodeFunctionData } from "viem";
 import { taikoInboxAbi } from "../chain/taikoInboxAbi";
 import { VerifierRegistryService } from "./verifier-registry.service";
@@ -55,10 +55,10 @@ export class ProofClassifierService {
     }
   }
 
-  async classifyProofSystems(
+  async classifyProof(
     verifierAddress: string,
     proofData: `0x${string}` | null
-  ): Promise<ProofSystem[]> {
+  ): Promise<{ proofSystems: ProofSystem[]; teeVerifiers: TeeVerifier[] }> {
     const normalizedVerifier = verifierAddress.toLowerCase();
     if (!this.registry.hasMappingFor(normalizedVerifier)) {
       await this.registry.hydrateComposeVerifier(verifierAddress);
@@ -70,6 +70,7 @@ export class ProofClassifierService {
       : [verifierAddress];
 
     const systems = this.registry.getSystemsFor(addressesToCheck);
+    const teeVerifiers = this.registry.getTeeVerifiersFor(addressesToCheck);
 
     if (!systems.length) {
       this.logger.warn(
@@ -77,6 +78,14 @@ export class ProofClassifierService {
       );
     }
 
-    return systems;
+    return { proofSystems: systems, teeVerifiers };
+  }
+
+  async classifyProofSystems(
+    verifierAddress: string,
+    proofData: `0x${string}` | null
+  ): Promise<ProofSystem[]> {
+    const result = await this.classifyProof(verifierAddress, proofData);
+    return result.proofSystems;
   }
 }

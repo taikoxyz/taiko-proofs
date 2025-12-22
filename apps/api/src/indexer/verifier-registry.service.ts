@@ -1,13 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
 import fs from "fs";
 import path from "path";
-import { ProofSystem } from "@taikoproofs/shared";
+import { ProofSystem, TeeVerifier } from "@taikoproofs/shared";
 import { AppConfigService } from "../config/app-config.service";
 import { ChainService } from "../chain/chain.service";
 import { composeVerifierAbi } from "../chain/composeVerifierAbi";
 
+interface TeeVerifierConfig {
+  sgxGeth?: string[];
+  sgxReth?: string[];
+}
+
 interface VerifierConfigFile {
-  tee?: string[];
+  tee?: string[] | TeeVerifierConfig;
   sp1?: string[];
   risc0?: string[];
 }
@@ -20,6 +25,7 @@ export class VerifierRegistryService {
     SP1: new Set(),
     RISC0: new Set()
   };
+  private readonly teeMapping = new Map<string, TeeVerifier>();
   private readonly composeCache = new Set<string>();
 
   constructor(
@@ -30,7 +36,7 @@ export class VerifierRegistryService {
   }
 
   private normalize(address: string): string {
-    return address.toLowerCase();
+    return address.trim().toLowerCase();
   }
 
   private addAddresses(system: ProofSystem, addresses: string[] | undefined) {
@@ -39,11 +45,32 @@ export class VerifierRegistryService {
     }
 
     for (const address of addresses) {
-      if (!address) {
+      if (!address || !address.trim()) {
         continue;
       }
 
       this.mapping[system].add(this.normalize(address));
+    }
+  }
+
+  private addTeeAddresses(
+    teeVerifier: TeeVerifier | null,
+    addresses: string[] | undefined
+  ) {
+    if (!addresses) {
+      return;
+    }
+
+    for (const address of addresses) {
+      if (!address || !address.trim()) {
+        continue;
+      }
+
+      const normalized = this.normalize(address);
+      this.mapping.TEE.add(normalized);
+      if (teeVerifier) {
+        this.teeMapping.set(normalized, teeVerifier);
+      }
     }
   }
 
@@ -59,7 +86,13 @@ export class VerifierRegistryService {
     try {
       const raw = fs.readFileSync(filePath, "utf-8");
       const parsed = JSON.parse(raw) as VerifierConfigFile;
-      this.addAddresses("TEE", parsed.tee);
+      const teeConfig = parsed.tee;
+      if (Array.isArray(teeConfig)) {
+        this.addAddresses("TEE", teeConfig);
+      } else if (teeConfig) {
+        this.addTeeAddresses("SGX_GETH", teeConfig.sgxGeth);
+        this.addTeeAddresses("SGX_RETH", teeConfig.sgxReth);
+      }
       this.addAddresses("SP1", parsed.sp1);
       this.addAddresses("RISC0", parsed.risc0);
     } catch (error) {
@@ -93,6 +126,20 @@ export class VerifierRegistryService {
     }
 
     return Array.from(systems);
+  }
+
+  getTeeVerifiersFor(addresses: string[]): TeeVerifier[] {
+    const verifiers = new Set<TeeVerifier>();
+
+    for (const address of addresses) {
+      const normalized = this.normalize(address);
+      const teeVerifier = this.teeMapping.get(normalized);
+      if (teeVerifier) {
+        verifiers.add(teeVerifier);
+      }
+    }
+
+    return Array.from(verifiers);
   }
 
   async hydrateComposeVerifier(verifierAddress: string): Promise<void> {
@@ -132,7 +179,9 @@ export class VerifierRegistryService {
           })
         ]);
 
-      this.addAddresses("TEE", [sgxGeth, tdxGeth, sgxReth]);
+      this.addTeeAddresses("SGX_GETH", [sgxGeth]);
+      this.addTeeAddresses(null, [tdxGeth]);
+      this.addTeeAddresses("SGX_RETH", [sgxReth]);
       this.addAddresses("RISC0", [risc0Reth]);
       this.addAddresses("SP1", [sp1Reth]);
       this.composeCache.add(normalized);
