@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BatchStatus {
+  proposed
+  proven
+  verified
+}
+
+enum ProofSystem {
+  TEE
+  SP1
+  RISC0
+}
+
+model Batch {
+  batchId                BigInt     @id @map("batch_id")
+  proposedAt             DateTime   @map("proposed_at")
+  proposedBlock          BigInt     @map("proposed_block")
+  proposer               String     @map("proposer") @db.VarChar(42)
+  provenAt               DateTime?  @map("proven_at")
+  provenBlock            BigInt?    @map("proven_block")
+  proofTxHash            String?    @map("proof_tx_hash") @db.VarChar(66)
+  verifierAddress        String?    @map("verifier_address") @db.VarChar(42)
+  proofSystems           ProofSystem[] @default([]) @map("proof_systems")
+  verifiedAt             DateTime?  @map("verified_at")
+  verifiedBlock          BigInt?    @map("verified_block")
+  status                 BatchStatus @default(proposed) @map("status")
+  transitionParentHash   String?    @map("transition_parent_hash") @db.VarChar(66)
+  transitionBlockHash    String?    @map("transition_block_hash") @db.VarChar(66)
+  transitionStateRoot    String?    @map("transition_state_root") @db.VarChar(66)
+  isContested            Boolean    @default(false) @map("is_contested")
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+
+  proofs                 BatchProof[]
+
+  @@index([provenAt])
+  @@index([verifiedAt])
+  @@map("batches")
+}
+
+model BatchProof {
+  id                    String      @id @default(uuid()) @db.Uuid
+  batchId               BigInt      @map("batch_id")
+  verifierAddress       String      @map("verifier_address") @db.VarChar(42)
+  proofSystems          ProofSystem[] @default([]) @map("proof_systems")
+  proofTxHash           String      @map("proof_tx_hash") @db.VarChar(66)
+  provenAt              DateTime    @map("proven_at")
+  provenBlock           BigInt      @map("proven_block")
+  transitionParentHash  String      @map("transition_parent_hash") @db.VarChar(66)
+  transitionBlockHash   String      @map("transition_block_hash") @db.VarChar(66)
+  transitionStateRoot   String      @map("transition_state_root") @db.VarChar(66)
+  isVerified            Boolean     @default(false) @map("is_verified")
+  createdAt             DateTime    @default(now()) @map("created_at")
+
+  batch                 Batch       @relation(fields: [batchId], references: [batchId])
+
+  @@unique([batchId, proofTxHash])
+  @@index([batchId])
+  @@index([provenAt])
+  @@map("batch_proofs")
+}
+
+model DailyStat {
+  date                   DateTime   @id @db.Date
+  provenTotal            Int        @default(0) @map("proven_total")
+  zkProvenTotal          Int        @default(0) @map("zk_proven_total")
+  teeTotal               Int        @default(0) @map("tee_total")
+  sp1Total               Int        @default(0) @map("sp1_total")
+  risc0Total             Int        @default(0) @map("risc0_total")
+  provingAvgSeconds      Float?     @map("proving_avg_seconds")
+  verificationAvgSeconds Float?     @map("verification_avg_seconds")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+
+  @@map("daily_stats")
+}
+
+model IndexingState {
+  chainId            Int      @id @map("chain_id")
+  lastProcessedBlock BigInt   @map("last_processed_block")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("indexing_state")
+}

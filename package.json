@@ -1,0 +1,13 @@
+{
+  "name": "taikoproofs",
+  "private": true,
+  "packageManager": "pnpm@8.15.4",
+  "scripts": {
+    "dev": "pnpm -r dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "api:dev": "pnpm --filter @taikoproofs/api dev",
+    "web:dev": "pnpm --filter @taikoproofs/web dev"
+  }
+}

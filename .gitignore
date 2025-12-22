@@ -1,0 +1,45 @@
+## Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+## Build output
+dist/
+build/
+out/
+.next/
+.nest/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+## Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+## Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.test
+
+## Tooling caches
+.turbo/
+.swc/
+.cache/
+.vercel/
+.eslintcache
+
+## OS/Editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.iml

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "paths": {
+      "@taikoproofs/shared": ["../../packages/shared/dist"]
+    }
+  },
+  "exclude": ["test", "**/*.spec.ts", "**/*.test.ts"]
+}

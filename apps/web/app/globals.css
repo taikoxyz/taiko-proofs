@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-body);
+  background: radial-gradient(1200px 600px at 80% -10%, rgba(87, 209, 201, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 10% 0%, rgba(242, 184, 75, 0.16), transparent 55%),
+    #0b0f12;
+  min-height: 100vh;
+}
+
+@layer components {
+  .glass {
+    @apply bg-card/80 backdrop-blur border border-line/60;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-line/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70;
+  }
+
+  .card {
+    @apply glass rounded-2xl p-6 shadow-subtle;
+  }
+
+  .label {
+    @apply text-xs uppercase tracking-[0.3em] text-white/50;
+  }
+}

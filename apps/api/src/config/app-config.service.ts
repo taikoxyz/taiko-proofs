@@ -1,0 +1,76 @@
+import { Injectable } from "@nestjs/common";
+import { z } from "zod";
+
+const EnvSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  RPC_URL: z.string().min(1),
+  CHAIN_ID: z.coerce.number(),
+  TAIKO_INBOX_ADDRESS: z.string().min(1),
+  START_BLOCK: z.coerce.number().optional(),
+  CONFIRMATIONS: z.coerce.number().default(6),
+  REORG_BUFFER: z.coerce.number().default(100),
+  STATS_LOOKBACK_DAYS: z.coerce.number().default(90),
+  INDEXER_CHUNK_SIZE: z.coerce.number().default(2000),
+  INDEXER_LOG_RANGE_LIMIT: z.coerce.number().optional(),
+  L1_EXPLORER_BASE_URL: z.string().optional(),
+  VERIFIER_CONFIG_PATH: z.string().optional()
+});
+
+export type AppConfig = z.infer<typeof EnvSchema>;
+
+@Injectable()
+export class AppConfigService {
+  private readonly config: AppConfig;
+
+  constructor() {
+    this.config = EnvSchema.parse(process.env);
+  }
+
+  get databaseUrl(): string {
+    return this.config.DATABASE_URL;
+  }
+
+  get rpcUrl(): string {
+    return this.config.RPC_URL;
+  }
+
+  get chainId(): number {
+    return this.config.CHAIN_ID;
+  }
+
+  get taikoInboxAddress(): string {
+    return this.config.TAIKO_INBOX_ADDRESS;
+  }
+
+  get startBlock(): number | undefined {
+    return this.config.START_BLOCK;
+  }
+
+  get confirmations(): number {
+    return this.config.CONFIRMATIONS;
+  }
+
+  get reorgBuffer(): number {
+    return this.config.REORG_BUFFER;
+  }
+
+  get statsLookbackDays(): number {
+    return this.config.STATS_LOOKBACK_DAYS;
+  }
+
+  get indexerChunkSize(): number {
+    return this.config.INDEXER_CHUNK_SIZE;
+  }
+
+  get indexerLogRangeLimit(): number | undefined {
+    return this.config.INDEXER_LOG_RANGE_LIMIT;
+  }
+
+  get explorerBaseUrl(): string | undefined {
+    return this.config.L1_EXPLORER_BASE_URL;
+  }
+
+  get verifierConfigPath(): string | undefined {
+    return this.config.VERIFIER_CONFIG_PATH;
+  }
+}

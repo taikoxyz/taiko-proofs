@@ -1,0 +1,68 @@
+import { StatsService } from "../src/stats/stats.service";
+import { PrismaService } from "../src/prisma/prisma.service";
+
+const prismaStub = {
+  dailyStat: {
+    findMany: jest.fn()
+  }
+};
+
+describe("StatsService", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("fills missing dates with zeros for zk share", async () => {
+    prismaStub.dailyStat.findMany.mockResolvedValue([
+      {
+        date: new Date("2024-01-02T00:00:00Z"),
+        provenTotal: 10,
+        zkProvenTotal: 7
+      }
+    ]);
+
+    const service = new StatsService(prismaStub as unknown as PrismaService);
+    const result = await service.getZkShare(
+      new Date("2024-01-01T00:00:00Z"),
+      new Date("2024-01-02T00:00:00Z")
+    );
+
+    expect(result.points).toHaveLength(2);
+    expect(result.points[0]).toEqual({
+      date: "2024-01-01",
+      provenTotal: 0,
+      zkProvenTotal: 0,
+      zkPercent: 0
+    });
+    expect(result.points[1]).toEqual({
+      date: "2024-01-02",
+      provenTotal: 10,
+      zkProvenTotal: 7,
+      zkPercent: 70
+    });
+  });
+
+  it("maps proof system usage points", async () => {
+    prismaStub.dailyStat.findMany.mockResolvedValue([
+      {
+        date: new Date("2024-02-01T00:00:00Z"),
+        teeTotal: 5,
+        sp1Total: 3,
+        risc0Total: 2
+      }
+    ]);
+
+    const service = new StatsService(prismaStub as unknown as PrismaService);
+    const result = await service.getProofSystemUsage(
+      new Date("2024-02-01T00:00:00Z"),
+      new Date("2024-02-01T00:00:00Z")
+    );
+
+    expect(result.points[0]).toEqual({
+      date: "2024-02-01",
+      tee: 5,
+      sp1: 3,
+      risc0: 2
+    });
+  });
+});
