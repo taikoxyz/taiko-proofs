@@ -38,6 +38,21 @@ function SectionHeader({ title, description }: { title: string; description: str
   );
 }
 
+const proofSystemLegend = [
+  { key: "teeSgxGeth", label: "TEE SGX GETH", color: "#57d1c9" },
+  { key: "teeSgxReth", label: "TEE SGX RETH", color: "#7ddbd2" },
+  { key: "sp1", label: "SP1", color: "#f2b84b" },
+  { key: "risc0", label: "RISC0", color: "#ec6b56" }
+] as const;
+
+const proofSystemLabels = proofSystemLegend.reduce<Record<string, string>>(
+  (acc, item) => {
+    acc[item.key] = item.label;
+    return acc;
+  },
+  {}
+);
+
 function LoadingCard() {
   return (
     <div className="card animate-pulse-soft h-64" />
@@ -162,7 +177,7 @@ export default function StatsView({ range }: StatsViewProps) {
       <section className="card">
         <SectionHeader
           title="Proof System Usage"
-          description="Each batch contributes to every proof system used."
+          description="Each batch contributes to every proof system used. TEE usage is split by verifier type."
         />
         <div className="mt-6 h-72">
           {proofSystems ? (
@@ -177,9 +192,14 @@ export default function StatsView({ range }: StatsViewProps) {
                     border: "1px solid #1f2a30",
                     borderRadius: 12
                   }}
+                  formatter={(value: number, name) => {
+                    const label = proofSystemLabels[name] ?? name;
+                    return [value, label];
+                  }}
                   labelStyle={{ color: "#9fb0ba" }}
                 />
-                <Bar dataKey="tee" stackId="proof" fill="#57d1c9" />
+                <Bar dataKey="teeSgxGeth" stackId="proof" fill="#57d1c9" />
+                <Bar dataKey="teeSgxReth" stackId="proof" fill="#7ddbd2" />
                 <Bar dataKey="sp1" stackId="proof" fill="#f2b84b" />
                 <Bar dataKey="risc0" stackId="proof" fill="#ec6b56" />
               </BarChart>
@@ -187,6 +207,17 @@ export default function StatsView({ range }: StatsViewProps) {
           ) : (
             <LoadingCard />
           )}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-4 text-xs uppercase tracking-[0.2em] text-white/50">
+          {proofSystemLegend.map((item) => (
+            <div key={item.key} className="flex items-center gap-2">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: item.color }}
+              />
+              <span>{item.label}</span>
+            </div>
+          ))}
         </div>
       </section>
 

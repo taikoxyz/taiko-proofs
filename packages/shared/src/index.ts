@@ -19,13 +19,17 @@ export interface BatchDetail extends BatchSummary {
   proposedBlock: string;
   provenBlock?: string | null;
   verifiedBlock?: string | null;
+  proposedTxHash?: string | null;
   proofTxHash?: string | null;
+  verifiedTxHash?: string | null;
   verifierAddress?: string | null;
   transitionParentHash?: string | null;
   transitionBlockHash?: string | null;
   transitionStateRoot?: string | null;
   proofLinks?: {
     tx?: string;
+    proposedTx?: string;
+    verifiedTx?: string;
     verifier?: string;
   };
 }
@@ -50,6 +54,8 @@ export interface ZkShareResponse {
 export interface ProofSystemPoint {
   date: string;
   tee: number;
+  teeSgxGeth: number;
+  teeSgxReth: number;
   sp1: number;
   risc0: number;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { format, subDays } from "date-fns";
 import RangePicker, { RangePreset, resolveRange } from "./RangePicker";
 import StatsView from "./StatsView";
@@ -15,7 +16,10 @@ const tabs = [
 type TabId = (typeof tabs)[number]["id"];
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<TabId>("stats");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeTab: TabId = searchParams.get("tab") === "batches" ? "batches" : "stats";
   const [preset, setPreset] = useState<RangePreset>("30");
   const [customStart, setCustomStart] = useState(
     format(subDays(new Date(), 30), "yyyy-MM-dd")
@@ -26,6 +30,18 @@ export default function Dashboard() {
     () => resolveRange(preset, customStart, customEnd),
     [preset, customStart, customEnd]
   );
+
+  const setActiveTab = (nextTab: TabId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextTab === "batches") {
+      params.set("tab", "batches");
+    } else {
+      params.delete("tab");
+      params.delete("page");
+    }
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   return (
     <div className="min-h-screen px-6 pb-16 pt-10 lg:px-14">

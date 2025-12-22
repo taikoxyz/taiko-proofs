@@ -47,6 +47,8 @@ describe("StatsService", () => {
       {
         date: new Date("2024-02-01T00:00:00Z"),
         teeTotal: 5,
+        teeSgxGethTotal: 3,
+        teeSgxRethTotal: 2,
         sp1Total: 3,
         risc0Total: 2
       }
@@ -61,6 +63,8 @@ describe("StatsService", () => {
     expect(result.points[0]).toEqual({
       date: "2024-02-01",
       tee: 5,
+      teeSgxGeth: 3,
+      teeSgxReth: 2,
       sp1: 3,
       risc0: 2
     });

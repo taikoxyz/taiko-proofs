@@ -19,8 +19,9 @@ export class BatchesService {
   ) {}
 
   async listBatches(query: BatchesQueryDto): Promise<BatchesResponse> {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 25;
+    const maxPageSize = 100;
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), maxPageSize);
     const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
 
     const where: Prisma.BatchWhereInput = {
@@ -92,6 +93,12 @@ export class BatchesService {
     const proofLinks = explorerBase
       ? {
           tx: batch.proofTxHash ? `${explorerBase}/tx/${batch.proofTxHash}` : undefined,
+          proposedTx: batch.proposedTxHash
+            ? `${explorerBase}/tx/${batch.proposedTxHash}`
+            : undefined,
+          verifiedTx: batch.verifiedTxHash
+            ? `${explorerBase}/tx/${batch.verifiedTxHash}`
+            : undefined,
           verifier: batch.verifierAddress
             ? `${explorerBase}/address/${batch.verifierAddress}`
             : undefined
@@ -111,7 +118,9 @@ export class BatchesService {
         proposedBlock: batch.proposedBlock.toString(),
         provenBlock: batch.provenBlock?.toString() ?? null,
         verifiedBlock: batch.verifiedBlock?.toString() ?? null,
+        proposedTxHash: batch.proposedTxHash,
         proofTxHash: batch.proofTxHash,
+        verifiedTxHash: batch.verifiedTxHash,
         verifierAddress: batch.verifierAddress,
         transitionParentHash: batch.transitionParentHash,
         transitionBlockHash: batch.transitionBlockHash,

@@ -25,6 +25,8 @@ export class StatsService {
         proven_total: number;
         zk_proven_total: number;
         tee_total: number;
+        tee_sgx_geth_total: number;
+        tee_sgx_reth_total: number;
         sp1_total: number;
         risc0_total: number;
         proving_avg_seconds: number | null;
@@ -35,6 +37,8 @@ export class StatsService {
         COUNT(*)::int as proven_total,
         SUM(CASE WHEN proof_systems && ARRAY['SP1','RISC0']::"ProofSystem"[] THEN 1 ELSE 0 END)::int as zk_proven_total,
         SUM(CASE WHEN 'TEE' = ANY(proof_systems) THEN 1 ELSE 0 END)::int as tee_total,
+        SUM(CASE WHEN 'SGX_GETH' = ANY(tee_verifiers) THEN 1 ELSE 0 END)::int as tee_sgx_geth_total,
+        SUM(CASE WHEN 'SGX_RETH' = ANY(tee_verifiers) THEN 1 ELSE 0 END)::int as tee_sgx_reth_total,
         SUM(CASE WHEN 'SP1' = ANY(proof_systems) THEN 1 ELSE 0 END)::int as sp1_total,
         SUM(CASE WHEN 'RISC0' = ANY(proof_systems) THEN 1 ELSE 0 END)::int as risc0_total,
         AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as proving_avg_seconds
@@ -76,6 +80,8 @@ export class StatsService {
           provenTotal: proven?.proven_total ?? 0,
           zkProvenTotal: proven?.zk_proven_total ?? 0,
           teeTotal: proven?.tee_total ?? 0,
+          teeSgxGethTotal: proven?.tee_sgx_geth_total ?? 0,
+          teeSgxRethTotal: proven?.tee_sgx_reth_total ?? 0,
           sp1Total: proven?.sp1_total ?? 0,
           risc0Total: proven?.risc0_total ?? 0,
           provingAvgSeconds: proven?.proving_avg_seconds ?? null,
@@ -85,6 +91,8 @@ export class StatsService {
           provenTotal: proven?.proven_total ?? 0,
           zkProvenTotal: proven?.zk_proven_total ?? 0,
           teeTotal: proven?.tee_total ?? 0,
+          teeSgxGethTotal: proven?.tee_sgx_geth_total ?? 0,
+          teeSgxRethTotal: proven?.tee_sgx_reth_total ?? 0,
           sp1Total: proven?.sp1_total ?? 0,
           risc0Total: proven?.risc0_total ?? 0,
           provingAvgSeconds: proven?.proving_avg_seconds ?? null,
@@ -150,6 +158,8 @@ export class StatsService {
       points.push({
         date: key,
         tee: row?.teeTotal ?? 0,
+        teeSgxGeth: row?.teeSgxGethTotal ?? 0,
+        teeSgxReth: row?.teeSgxRethTotal ?? 0,
         sp1: row?.sp1Total ?? 0,
         risc0: row?.risc0Total ?? 0
       });

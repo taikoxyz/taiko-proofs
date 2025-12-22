@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import clsx from "clsx";
 import {
@@ -10,6 +10,7 @@ import {
   ProofSystem,
   TeeVerifier
 } from "@taikoproofs/shared";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { buildApiUrl, fetcher } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 
@@ -32,45 +33,143 @@ const teeLabels: Record<TeeVerifier, string> = {
   SGX_GETH: "SGX GETH",
   SGX_RETH: "SGX RETH"
 };
+const PAGE_SIZE = 20;
 
-function buildProofLabels(
+type ProofBadgeTone = "tee" | "teeGeth" | "teeReth" | "sp1" | "risc0";
+
+const proofBadgeStyles: Record<ProofBadgeTone, string> = {
+  tee: "border-mint/50 bg-mint/10 text-mint",
+  teeGeth: "border-mint/40 bg-mint/10 text-mint",
+  teeReth: "border-mint/40 bg-mint/20 text-mint",
+  sp1: "border-accentSoft/50 bg-accent/10 text-accent",
+  risc0: "border-[#ec6b56]/40 bg-[#ec6b56]/10 text-[#ec6b56]"
+};
+
+function buildProofBadges(
   proofSystems: ProofSystem[],
   teeVerifiers?: TeeVerifier[]
 ) {
-  const labels = new Set<string>();
+  const badges: { label: string; tone: ProofBadgeTone }[] = [];
+  const seen = new Set<string>();
 
   for (const system of proofSystems) {
-    if (system === "TEE" && teeVerifiers?.length) {
-      for (const tee of teeVerifiers) {
-        labels.add(`TEE ${teeLabels[tee] ?? tee}`);
+    if (system === "TEE") {
+      if (teeVerifiers?.length) {
+        for (const tee of teeVerifiers) {
+          const label = `TEE ${teeLabels[tee] ?? tee}`;
+          if (seen.has(label)) {
+            continue;
+          }
+          const tone =
+            tee === "SGX_GETH" ? "teeGeth" : tee === "SGX_RETH" ? "teeReth" : "tee";
+          badges.push({ label, tone });
+          seen.add(label);
+        }
+      } else {
+        const label = "TEE";
+        if (!seen.has(label)) {
+          badges.push({ label, tone: "tee" });
+          seen.add(label);
+        }
       }
       continue;
     }
 
-    labels.add(system);
+    const label = system;
+    if (seen.has(label)) {
+      continue;
+    }
+    badges.push({
+      label,
+      tone: system === "SP1" ? "sp1" : "risc0"
+    });
+    seen.add(label);
   }
 
-  return Array.from(labels);
+  return badges;
 }
 
-function formatProofSystems(
-  proofSystems: ProofSystem[],
-  teeVerifiers?: TeeVerifier[]
-) {
-  const labels = buildProofLabels(proofSystems, teeVerifiers);
-  return labels.length ? labels.join(", ") : "—";
+function ProofBadge({ label, tone }: { label: string; tone: ProofBadgeTone }) {
+  return (
+    <span
+      className={clsx(
+        "rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.2em]",
+        proofBadgeStyles[tone]
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ProofBadgeGroup({
+  proofSystems,
+  teeVerifiers
+}: {
+  proofSystems: ProofSystem[];
+  teeVerifiers?: TeeVerifier[];
+}) {
+  const badges = buildProofBadges(proofSystems, teeVerifiers);
+  if (!badges.length) {
+    return <span className="text-white/40">—</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {badges.map((badge, index) => (
+        <ProofBadge
+          key={`${badge.label}-${index}`}
+          label={badge.label}
+          tone={badge.tone}
+        />
+      ))}
+    </div>
+  );
 }
 
 export default function BatchesView({ range }: BatchesViewProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<BatchStatus | "all">("all");
   const [systems, setSystems] = useState<ProofSystem[]>([]);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const rangeKey = `${range.start}:${range.end}`;
+  const previousRange = useRef(rangeKey);
+
+  const pageParam = Number(searchParams.get("page"));
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
+
+  const setPageInUrl = useCallback(
+    (nextPage: number, mode: "push" | "replace" = "push") => {
+      const normalized = Number.isFinite(nextPage) ? Math.max(1, Math.floor(nextPage)) : 1;
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized === 1) {
+        params.delete("page");
+      } else {
+        params.set("page", String(normalized));
+      }
+      params.set("tab", "batches");
+      const query = params.toString();
+      const href = query ? `${pathname}?${query}` : pathname;
+      if (mode === "replace") {
+        router.replace(href, { scroll: false });
+      } else {
+        router.push(href, { scroll: false });
+      }
+    },
+    [pathname, router, searchParams]
+  );
 
   useEffect(() => {
-    setPage(1);
-  }, [status, systems, search, range.start, range.end]);
+    if (previousRange.current !== rangeKey) {
+      previousRange.current = rangeKey;
+      if (page !== 1) {
+        setPageInUrl(1, "replace");
+      }
+    }
+  }, [page, rangeKey, setPageInUrl]);
 
   const params = useMemo(
     () => ({
@@ -79,7 +178,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
       system: systems.length ? systems.join(",") : undefined,
       search: search || undefined,
       page,
-      pageSize: 20
+      pageSize: PAGE_SIZE
     }),
     [range, status, systems, search, page]
   );
@@ -95,10 +194,16 @@ export default function BatchesView({ range }: BatchesViewProps) {
     fetcher
   );
 
+  const currentPage = data?.page ?? page;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+
   const toggleSystem = (system: ProofSystem) => {
     setSystems((prev) =>
       prev.includes(system) ? prev.filter((item) => item !== system) : [...prev, system]
     );
+    if (page !== 1) {
+      setPageInUrl(1, "replace");
+    }
   };
 
   return (
@@ -122,7 +227,12 @@ export default function BatchesView({ range }: BatchesViewProps) {
                     ? "bg-accent text-ink"
                     : "bg-slate text-white/60"
                 )}
-                onClick={() => setStatus(filter.value)}
+                onClick={() => {
+                  setStatus(filter.value);
+                  if (page !== 1) {
+                    setPageInUrl(1, "replace");
+                  }
+                }}
               >
                 {filter.label}
               </button>
@@ -150,7 +260,12 @@ export default function BatchesView({ range }: BatchesViewProps) {
           <input
             type="text"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              if (page !== 1) {
+                setPageInUrl(1, "replace");
+              }
+            }}
             placeholder="Search batch id"
             className="ml-auto min-w-[180px] rounded-full border border-line/70 bg-slate px-4 py-2 text-sm text-white/80"
           />
@@ -178,22 +293,10 @@ export default function BatchesView({ range }: BatchesViewProps) {
               >
                 <td className="px-4 py-3 font-medium text-white">#{batch.batchId}</td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {batch.proofSystems.length ? (
-                      buildProofLabels(batch.proofSystems, batch.teeVerifiers).map(
-                        (label, index) => (
-                          <span
-                            key={`${batch.batchId}-${label}-${index}`}
-                            className="rounded-full border border-line/70 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-white/70"
-                          >
-                            {label}
-                          </span>
-                        )
-                      )
-                    ) : (
-                      <span className="text-white/40">—</span>
-                    )}
-                  </div>
+                  <ProofBadgeGroup
+                    proofSystems={batch.proofSystems}
+                    teeVerifiers={batch.teeVerifiers}
+                  />
                 </td>
                 <td className="px-4 py-3 text-white/70">
                   {formatDateTime(batch.proposedAt)}
@@ -218,20 +321,20 @@ export default function BatchesView({ range }: BatchesViewProps) {
 
         <div className="flex items-center justify-between border-t border-line/60 px-4 py-4 text-sm text-white/70">
           <span>
-            Page {data?.page ?? 1} of {data ? Math.ceil(data.total / data.pageSize) : 1}
+            Page {currentPage} of {totalPages}
           </span>
           <div className="flex items-center gap-2">
             <button
               className="rounded-full border border-line/70 px-3 py-1 disabled:opacity-40"
-              disabled={!data || page === 1}
-              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={!data || currentPage === 1}
+              onClick={() => setPageInUrl(currentPage - 1)}
             >
               Prev
             </button>
             <button
               className="rounded-full border border-line/70 px-3 py-1 disabled:opacity-40"
-              disabled={!data || data.page * data.pageSize >= data.total}
-              onClick={() => setPage((prev) => prev + 1)}
+              disabled={!data || currentPage >= totalPages}
+              onClick={() => setPageInUrl(currentPage + 1)}
             >
               Next
             </button>
@@ -292,15 +395,36 @@ function BatchDrawer({
         </div>
 
         <div className="mt-6 space-y-4 text-sm text-white/70">
-          <DetailRow label="Proposer" value={batch.proposer} />
+          <DetailRow label="Proposer" value={batch.proposer} mono />
           <DetailRow label="Status" value={batch.status} />
           <DetailRow
             label="Proof Systems"
-            value={formatProofSystems(batch.proofSystems, batch.teeVerifiers)}
+            value={
+              <ProofBadgeGroup
+                proofSystems={batch.proofSystems}
+                teeVerifiers={batch.teeVerifiers}
+              />
+            }
           />
           <DetailRow label="Proposed" value={formatDateTime(batch.proposedAt)} />
+          {batch.proposedTxHash && (
+            <DetailRow
+              label="Proposed Tx"
+              value={batch.proposedTxHash}
+              href={batch.proofLinks?.proposedTx}
+              mono
+            />
+          )}
           <DetailRow label="Proven" value={formatDateTime(batch.provenAt)} />
           <DetailRow label="Verified" value={formatDateTime(batch.verifiedAt)} />
+          {batch.verifiedTxHash && (
+            <DetailRow
+              label="Verified Tx"
+              value={batch.verifiedTxHash}
+              href={batch.proofLinks?.verifiedTx}
+              mono
+            />
+          )}
           <DetailRow label="Transition Parent" value={batch.transitionParentHash ?? "—"} />
           <DetailRow label="Transition Block" value={batch.transitionBlockHash ?? "—"} />
           <DetailRow label="State Root" value={batch.transitionStateRoot ?? "—"} />
@@ -309,6 +433,7 @@ function BatchDrawer({
               label="Proof Tx"
               value={batch.proofTxHash}
               href={batch.proofLinks?.tx}
+              mono
             />
           )}
           {batch.verifierAddress && (
@@ -316,6 +441,7 @@ function BatchDrawer({
               label="Verifier"
               value={batch.verifierAddress}
               href={batch.proofLinks?.verifier}
+              mono
             />
           )}
         </div>
@@ -327,21 +453,29 @@ function BatchDrawer({
 function DetailRow({
   label,
   value,
-  href
+  href,
+  mono
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   href?: string;
+  mono?: boolean;
 }) {
+  const valueClassName = clsx(mono && "break-all font-mono text-xs text-white/80");
+
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs uppercase tracking-[0.3em] text-white/40">{label}</span>
       {href ? (
-        <a href={href} target="_blank" className="text-accent hover:text-accentSoft">
+        <a
+          href={href}
+          target="_blank"
+          className={clsx("text-accent hover:text-accentSoft", valueClassName)}
+        >
           {value}
         </a>
       ) : (
-        <span>{value}</span>
+        <span className={valueClassName}>{value}</span>
       )}
     </div>
   );

@@ -210,7 +210,8 @@ export class IndexerService {
       },
       data: {
         verifiedAt: null,
-        verifiedBlock: null
+        verifiedBlock: null,
+        verifiedTxHash: null
       }
     });
 
@@ -288,6 +289,7 @@ export class IndexerService {
     const proposedAt = new Date(Number(meta.proposedAt) * 1000);
     const proposedBlock = BigInt(info.proposedIn);
     const proposer = meta.proposer.toLowerCase();
+    const proposedTxHash = log.transactionHash ?? null;
 
     await this.prisma.batch.upsert({
       where: { batchId },
@@ -295,13 +297,15 @@ export class IndexerService {
         batchId,
         proposedAt,
         proposedBlock,
+        proposedTxHash,
         proposer,
         status: "proposed"
       },
       update: {
         proposedAt,
         proposedBlock,
-        proposer
+        proposer,
+        ...(proposedTxHash ? { proposedTxHash } : {})
       }
     });
 
@@ -513,6 +517,7 @@ export class IndexerService {
       blockHash: string;
     };
     const verifiedAt = await getBlockTimestamp(log.blockNumber);
+    const verifiedTxHash = log.transactionHash ?? null;
 
     const proof = await this.prisma.batchProof.findFirst({
       where: {
@@ -531,12 +536,14 @@ export class IndexerService {
         status: "verified",
         verifiedAt,
         verifiedBlock: BigInt(log.blockNumber),
+        verifiedTxHash,
         transitionBlockHash: blockHash
       },
       update: {
         status: "verified",
         verifiedAt,
         verifiedBlock: BigInt(log.blockNumber),
+        ...(verifiedTxHash ? { verifiedTxHash } : {}),
         transitionBlockHash: blockHash
       }
     });
