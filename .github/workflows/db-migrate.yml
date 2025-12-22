@@ -3,6 +3,8 @@ name: db-migrate
 on:
   push:
     branches: [main]
+    paths:
+      - apps/api/prisma/**
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +14,8 @@ concurrency:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    environment:
+      name: "Production – taiko-proofs-api"
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DIRECT_URL: ${{ secrets.DIRECT_URL }}

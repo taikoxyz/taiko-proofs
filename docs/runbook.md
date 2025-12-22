@@ -20,9 +20,12 @@
 - Vercel cron will call `GET /admin/index` every minute.
 
 ## Vercel setup
-- Create two projects pointing at `taikoproofs/` as root.
+- Create two projects with explicit roots:
+  - Web root: `apps/web`
+  - API root: `apps/api` (keeps `vercel.json` + `api/` at project root)
 - Web build command: `pnpm --filter @taikoproofs/web build`
-- API build command: `pnpm --filter @taikoproofs/api build`
+- API build command: `pnpm --filter @taikoproofs/shared build && pnpm --filter @taikoproofs/api build`
+- Run Prisma migrations outside Vercel builds (e.g. `db-migrate` workflow or `pnpm --filter @taikoproofs/api exec prisma migrate deploy`).
 
 ## Verifier mapping
 - Update verifier mapping via JSON file and set `VERIFIER_CONFIG_PATH`.
