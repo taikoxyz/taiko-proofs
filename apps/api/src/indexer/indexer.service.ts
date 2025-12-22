@@ -99,8 +99,6 @@ export class IndexerService {
     await this.rollbackRange(fromBlock, toBlock);
 
     const client = this.chain.getClient();
-    const address = this.config.taikoInboxAddress as `0x${string}`;
-
     const proposedLogs = await this.getLogsSafe(batchProposedEvent, fromBlock, toBlock);
     const provedLogs = await this.getLogsSafe(batchesProvedEvent, fromBlock, toBlock);
     const verifiedLogs = await this.getLogsSafe(batchesVerifiedEvent, fromBlock, toBlock);

@@ -1,0 +1,2 @@
+[codespell]
+skip = .git,node_modules,apps/api/node_modules,apps/web/node_modules,packages/shared/node_modules,apps/api/dist,apps/web/.next,packages/shared/dist
