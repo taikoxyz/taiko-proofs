@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { decodeEventLog, parseAbiItem, Log, PublicClient } from "viem";
-import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ChainService } from "../chain/chain.service";
 import { AppConfigService } from "../config/app-config.service";
@@ -111,7 +110,13 @@ export class IndexerService {
       rangeIndex += 1n;
     }
 
+    const statsStartedAt = Date.now();
     await this.stats.refreshDailyStats(this.config.statsLookbackDays);
+    this.logger.log(
+      `Stats refresh (${this.config.statsLookbackDays} days) in ${this.formatDuration(
+        statsStartedAt
+      )}.`
+    );
 
     const runDurationSeconds = ((Date.now() - runStartedAt) / 1000).toFixed(1);
     this.logger.log(
@@ -122,14 +127,46 @@ export class IndexerService {
   }
 
   private async processRange(fromBlock: bigint, toBlock: bigint): Promise<number> {
-    await this.rollbackRange(fromBlock, toBlock);
+    const rangeLabel = `${fromBlock} -> ${toBlock}`;
+    const rollbackStartedAt = Date.now();
+    const rollbackStats = await this.rollbackRange(fromBlock, toBlock);
+    this.logger.log(
+      `Range ${rangeLabel} rollback: ${rollbackStats.proofs} proofs, ${rollbackStats.verified} verified batches, ${rollbackStats.reconciled} reconciled in ${this.formatDuration(
+        rollbackStartedAt
+      )}.`
+    );
+
+    const resetStartedAt = Date.now();
     await this.resetVerificationCursor(fromBlock);
+    this.logger.log(
+      `Range ${rangeLabel} reset verification cursor in ${this.formatDuration(resetStartedAt)}.`
+    );
 
     const client = this.chain.getClient();
-    const proposedLogs = await this.getLogsSafe(batchProposedEvent, fromBlock, toBlock);
-    const provedLogs = await this.getLogsSafe(batchesProvedEvent, fromBlock, toBlock);
-    const verifiedLogs = await this.getLogsSafe(batchesVerifiedEvent, fromBlock, toBlock);
-    const conflictingLogs = await this.getLogsSafe(conflictingProofEvent, fromBlock, toBlock);
+    const proposedLogs = await this.fetchLogsWithTiming(
+      "BatchProposed",
+      batchProposedEvent,
+      fromBlock,
+      toBlock
+    );
+    const provedLogs = await this.fetchLogsWithTiming(
+      "BatchesProved",
+      batchesProvedEvent,
+      fromBlock,
+      toBlock
+    );
+    const verifiedLogs = await this.fetchLogsWithTiming(
+      "BatchesVerified",
+      batchesVerifiedEvent,
+      fromBlock,
+      toBlock
+    );
+    const conflictingLogs = await this.fetchLogsWithTiming(
+      "ConflictingProof",
+      conflictingProofEvent,
+      fromBlock,
+      toBlock
+    );
 
     const blockTimestampCache = new Map<string, Date>();
 
@@ -146,21 +183,45 @@ export class IndexerService {
       return date;
     };
 
+    const proposedStartedAt = Date.now();
     for (const log of proposedLogs) {
       await this.handleBatchProposed(log, getBlockTimestamp);
     }
+    this.logger.log(
+      `Range ${rangeLabel} handled ${proposedLogs.length} BatchProposed log(s) in ${this.formatDuration(
+        proposedStartedAt
+      )}.`
+    );
 
+    const provedStartedAt = Date.now();
     for (const log of provedLogs) {
       await this.handleBatchesProved(log, getBlockTimestamp);
     }
+    this.logger.log(
+      `Range ${rangeLabel} handled ${provedLogs.length} BatchesProved log(s) in ${this.formatDuration(
+        provedStartedAt
+      )}.`
+    );
 
+    const verifiedStartedAt = Date.now();
     for (const log of verifiedLogs) {
       await this.handleBatchesVerified(log, getBlockTimestamp);
     }
+    this.logger.log(
+      `Range ${rangeLabel} handled ${verifiedLogs.length} BatchesVerified log(s) in ${this.formatDuration(
+        verifiedStartedAt
+      )}.`
+    );
 
+    const conflictingStartedAt = Date.now();
     for (const log of conflictingLogs) {
       await this.handleConflictingProof(log);
     }
+    this.logger.log(
+      `Range ${rangeLabel} handled ${conflictingLogs.length} ConflictingProof log(s) in ${this.formatDuration(
+        conflictingStartedAt
+      )}.`
+    );
 
     return (
       proposedLogs.length +
@@ -170,7 +231,10 @@ export class IndexerService {
     );
   }
 
-  private async rollbackRange(fromBlock: bigint, toBlock: bigint) {
+  private async rollbackRange(
+    fromBlock: bigint,
+    toBlock: bigint
+  ): Promise<{ proofs: number; verified: number; reconciled: number }> {
     const proofsInRange = await this.prisma.batchProof.findMany({
       where: {
         provenBlock: {
@@ -243,6 +307,12 @@ export class IndexerService {
     for (const batchId of affectedBatchIds) {
       await this.reconcileBatch(batchId);
     }
+
+    return {
+      proofs: proofsInRange.length,
+      verified: verifiedInRange.length,
+      reconciled: affectedBatchIds.size
+    };
   }
 
   private async reconcileBatch(batchId: bigint) {
@@ -563,19 +633,15 @@ export class IndexerService {
     const rangeStart = prevLast + 1n;
     const rangeEnd = newLast;
 
-    const createChunkSize = 1000n;
-    let cursor = rangeStart;
+    const existing = await this.prisma.batch.findUnique({
+      where: { batchId: newLast },
+      select: { batchId: true }
+    });
 
-    while (cursor <= rangeEnd) {
-      const chunkEnd =
-        cursor + createChunkSize - 1n > rangeEnd
-          ? rangeEnd
-          : cursor + createChunkSize - 1n;
-      const createData: Prisma.BatchCreateManyInput[] = [];
-
-      for (let batchCursor = cursor; batchCursor <= chunkEnd; batchCursor += 1n) {
-        createData.push({
-          batchId: batchCursor,
+    if (!existing) {
+      await this.prisma.batch.create({
+        data: {
+          batchId: newLast,
           proposedAt: verifiedAt,
           proposedBlock: verifiedBlock,
           proposer: ZERO_ADDRESS,
@@ -584,16 +650,9 @@ export class IndexerService {
           verifiedAt,
           verifiedBlock,
           verifiedTxHash,
-          transitionBlockHash: batchCursor === rangeEnd ? blockHash : null
-        });
-      }
-
-      await this.prisma.batch.createMany({
-        data: createData,
-        skipDuplicates: true
+          transitionBlockHash: blockHash
+        }
       });
-
-      cursor = chunkEnd + 1n;
     }
 
     await this.prisma.batch.updateMany({
@@ -611,12 +670,14 @@ export class IndexerService {
       }
     });
 
-    await this.prisma.batch.update({
-      where: { batchId: newLast },
-      data: {
-        transitionBlockHash: blockHash
-      }
-    });
+    if (existing) {
+      await this.prisma.batch.update({
+        where: { batchId: newLast },
+        data: {
+          transitionBlockHash: blockHash
+        }
+      });
+    }
 
     const proof = await this.prisma.batchProof.findFirst({
       where: {
@@ -749,6 +810,26 @@ export class IndexerService {
     }
 
     return results;
+  }
+
+  private async fetchLogsWithTiming(
+    label: string,
+    event: GetLogsEvent,
+    fromBlock: bigint,
+    toBlock: bigint
+  ): Promise<Log[]> {
+    const startedAt = Date.now();
+    const logs = await this.getLogsSafe(event, fromBlock, toBlock);
+    this.logger.log(
+      `Range ${fromBlock} -> ${toBlock} fetched ${label}: ${logs.length} log(s) in ${this.formatDuration(
+        startedAt
+      )}.`
+    );
+    return logs;
+  }
+
+  private formatDuration(startedAt: number): string {
+    return `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
   }
 
   private isLogRangeError(error: unknown): boolean {
