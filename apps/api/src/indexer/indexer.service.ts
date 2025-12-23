@@ -292,18 +292,29 @@ export class IndexerService {
     const proposer = meta.proposer.toLowerCase();
     const proposedTxHash = log.transactionHash ?? null;
 
+    let normalizedProposedAt = proposedAt;
+    if (log.blockNumber) {
+      const blockTimestamp = await getBlockTimestamp(log.blockNumber);
+      if (proposedAt > blockTimestamp) {
+        this.logger.warn(
+          `Batch ${batchId} proposedAt is ahead of block timestamp, using on-chain timestamp`
+        );
+        normalizedProposedAt = blockTimestamp;
+      }
+    }
+
     await this.prisma.batch.upsert({
       where: { batchId },
       create: {
         batchId,
-        proposedAt,
+        proposedAt: normalizedProposedAt,
         proposedBlock,
         proposedTxHash,
         proposer,
         status: "proposed"
       },
       update: {
-        proposedAt,
+        proposedAt: normalizedProposedAt,
         proposedBlock,
         proposer,
         ...(proposedTxHash ? { proposedTxHash } : {})
@@ -312,13 +323,6 @@ export class IndexerService {
 
     if (!log.blockNumber) {
       return;
-    }
-
-    const blockTimestamp = await getBlockTimestamp(log.blockNumber);
-    if (proposedAt > blockTimestamp) {
-      this.logger.warn(
-        `Batch ${batchId} proposedAt is ahead of block timestamp, using on-chain timestamp`
-      );
     }
   }
 

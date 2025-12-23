@@ -247,6 +247,7 @@ export class StatsService {
           WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
+            AND proven_at >= proposed_at
             AND status = 'verified'
         `
       : this.prisma.$queryRaw<
@@ -268,6 +269,7 @@ export class StatsService {
           WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
+            AND proven_at >= proposed_at
         `;
 
     const [stats] = await statsQuery;
@@ -288,6 +290,7 @@ export class StatsService {
           WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
+            AND proven_at >= proposed_at
             AND status = 'verified'
           GROUP BY 1
           ORDER BY 1
@@ -300,6 +303,7 @@ export class StatsService {
           WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
+            AND proven_at >= proposed_at
           GROUP BY 1
           ORDER BY 1
         `;
@@ -361,6 +365,7 @@ export class StatsService {
       WHERE ${rangeClause}
         AND is_contested = false
         AND proposed_at IS NOT NULL
+        AND verified_at >= proposed_at
         AND status = 'verified'
     `;
 
@@ -374,6 +379,7 @@ export class StatsService {
       WHERE ${rangeClause}
         AND is_contested = false
         AND proposed_at IS NOT NULL
+        AND verified_at >= proposed_at
         AND status = 'verified'
       GROUP BY 1
       ORDER BY 1
