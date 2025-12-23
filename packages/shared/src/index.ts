@@ -74,6 +74,8 @@ export interface ProofSystemResponse {
 export interface LatencyStats {
   avgSeconds: number;
   medianSeconds: number;
+  p90Seconds: number;
+  p95Seconds: number;
   p99Seconds: number;
 }
 

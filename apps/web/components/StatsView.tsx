@@ -254,7 +254,7 @@ export default function StatsView({ range }: StatsViewProps) {
                   : "cursor-default border-line/40 bg-slate/40 text-white/60"
               )}
             >
-              <span>Not ZK Proven</span>
+              <span>Not Proven By ZK</span>
               <span className="flex items-center gap-3">
                 <span className={clsx("font-medium", canNavigateToNonZk ? "text-white" : "text-white/70")}>
                   {notZkProven ?? "—"}
@@ -331,7 +331,7 @@ export default function StatsView({ range }: StatsViewProps) {
         <div className="card">
           <SectionHeader
             title="Latency"
-            description="Average, median, and p99 latency from proposal to proof/verification."
+            description="Average, median, p90, p95, and p99 latency from proposal to proof/verification."
           />
 
           <div className="mt-6 flex items-center gap-3">
@@ -415,7 +415,13 @@ function LatencyCard({
   stats
 }: {
   title: string;
-  stats?: { avgSeconds: number; medianSeconds: number; p99Seconds: number };
+  stats?: {
+    avgSeconds: number;
+    medianSeconds: number;
+    p90Seconds: number;
+    p95Seconds: number;
+    p99Seconds: number;
+  };
 }) {
   return (
     <div className="rounded-2xl border border-line/60 bg-slate/70 p-4">
@@ -428,6 +434,14 @@ function LatencyCard({
         <div className="flex items-center justify-between text-sm text-white/70">
           <span>Median</span>
           <span>{formatDurationSeconds(stats?.medianSeconds)}</span>
+        </div>
+        <div className="flex items-center justify-between text-sm text-white/70">
+          <span>p90</span>
+          <span>{formatDurationSeconds(stats?.p90Seconds)}</span>
+        </div>
+        <div className="flex items-center justify-between text-sm text-white/70">
+          <span>p95</span>
+          <span>{formatDurationSeconds(stats?.p95Seconds)}</span>
         </div>
         <div className="flex items-center justify-between text-sm text-white/70">
           <span>p99</span>

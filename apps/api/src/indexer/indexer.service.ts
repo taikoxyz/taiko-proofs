@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { decodeEventLog, parseAbiItem, Log, PublicClient } from "viem";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { ChainService } from "../chain/chain.service";
 import { AppConfigService } from "../config/app-config.service";
@@ -33,6 +34,7 @@ type GetLogsEvent = NonNullable<
 export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
   private logRangeLimit?: bigint;
+  private lastVerifiedBatchId: bigint = 0n;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -97,6 +99,7 @@ export class IndexerService {
 
   private async processRange(fromBlock: bigint, toBlock: bigint): Promise<number> {
     await this.rollbackRange(fromBlock, toBlock);
+    await this.resetVerificationCursor(fromBlock);
 
     const client = this.chain.getClient();
     const proposedLogs = await this.getLogsSafe(batchProposedEvent, fromBlock, toBlock);
@@ -514,34 +517,76 @@ export class IndexerService {
       batchId: bigint;
       blockHash: string;
     };
+    const newLast = BigInt(batchId);
+    const prevLast = this.lastVerifiedBatchId ?? 0n;
+
+    if (newLast <= prevLast) {
+      return;
+    }
+
     const verifiedAt = await getBlockTimestamp(log.blockNumber);
     const verifiedTxHash = log.transactionHash ?? null;
+    const verifiedBlock = BigInt(log.blockNumber);
+    const rangeStart = prevLast + 1n;
+    const rangeEnd = newLast;
 
-    const proof = await this.prisma.batchProof.findFirst({
+    const createChunkSize = 1000n;
+    let cursor = rangeStart;
+
+    while (cursor <= rangeEnd) {
+      const chunkEnd =
+        cursor + createChunkSize - 1n > rangeEnd
+          ? rangeEnd
+          : cursor + createChunkSize - 1n;
+      const createData: Prisma.BatchCreateManyInput[] = [];
+
+      for (let batchCursor = cursor; batchCursor <= chunkEnd; batchCursor += 1n) {
+        createData.push({
+          batchId: batchCursor,
+          proposedAt: verifiedAt,
+          proposedBlock: verifiedBlock,
+          proposer: ZERO_ADDRESS,
+          status: "verified",
+          verifiedAt,
+          verifiedBlock,
+          verifiedTxHash,
+          transitionBlockHash: batchCursor === rangeEnd ? blockHash : null
+        });
+      }
+
+      await this.prisma.batch.createMany({
+        data: createData,
+        skipDuplicates: true
+      });
+
+      cursor = chunkEnd + 1n;
+    }
+
+    await this.prisma.batch.updateMany({
       where: {
-        batchId,
+        batchId: {
+          gte: rangeStart,
+          lte: rangeEnd
+        }
+      },
+      data: {
+        status: "verified",
+        verifiedAt,
+        verifiedBlock,
+        ...(verifiedTxHash ? { verifiedTxHash } : {})
+      }
+    });
+
+    await this.prisma.batch.update({
+      where: { batchId: newLast },
+      data: {
         transitionBlockHash: blockHash
       }
     });
 
-    await this.prisma.batch.upsert({
-      where: { batchId },
-      create: {
-        batchId,
-        proposedAt: verifiedAt,
-        proposedBlock: BigInt(log.blockNumber),
-        proposer: ZERO_ADDRESS,
-        status: "verified",
-        verifiedAt,
-        verifiedBlock: BigInt(log.blockNumber),
-        verifiedTxHash,
-        transitionBlockHash: blockHash
-      },
-      update: {
-        status: "verified",
-        verifiedAt,
-        verifiedBlock: BigInt(log.blockNumber),
-        ...(verifiedTxHash ? { verifiedTxHash } : {}),
+    const proof = await this.prisma.batchProof.findFirst({
+      where: {
+        batchId: newLast,
         transitionBlockHash: blockHash
       }
     });
@@ -553,7 +598,7 @@ export class IndexerService {
       });
 
       await this.prisma.batch.update({
-        where: { batchId },
+        where: { batchId: newLast },
         data: {
           proofSystems: { set: proof.proofSystems },
           teeVerifiers: { set: proof.teeVerifiers },
@@ -567,6 +612,22 @@ export class IndexerService {
         }
       });
     }
+
+    this.lastVerifiedBatchId = newLast;
+  }
+
+  private async resetVerificationCursor(fromBlock: bigint) {
+    const lastVerified = await this.prisma.batch.findFirst({
+      where: {
+        verifiedBlock: {
+          lt: fromBlock
+        }
+      },
+      orderBy: { batchId: "desc" },
+      select: { batchId: true }
+    });
+
+    this.lastVerifiedBatchId = lastVerified?.batchId ?? 0n;
   }
 
   private async handleConflictingProof(log: Log) {

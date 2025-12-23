@@ -27,17 +27,22 @@ export function formatDate(value?: string | null) {
   return dateFormatter.format(new Date(value));
 }
 
-export function formatDurationSeconds(seconds?: number | null) {
-  if (!seconds && seconds !== 0) {
+export function formatDurationSeconds(seconds?: number | string | null) {
+  if (seconds === null || seconds === undefined) {
     return "—";
   }
 
-  if (seconds < 60) {
-    return `${seconds.toFixed(0)}s`;
+  const numeric = typeof seconds === "number" ? seconds : Number(seconds);
+  if (!Number.isFinite(numeric)) {
+    return "—";
   }
 
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.floor(seconds % 60);
+  if (numeric < 60) {
+    return `${numeric.toFixed(0)}s`;
+  }
+
+  const minutes = Math.floor(numeric / 60);
+  const remaining = Math.floor(numeric % 60);
   if (minutes < 60) {
     return `${minutes}m ${remaining}s`;
   }

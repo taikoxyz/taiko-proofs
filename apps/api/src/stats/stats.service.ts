@@ -230,14 +230,18 @@ export class StatsService {
     const statsQuery = verifiedOnly
       ? this.prisma.$queryRaw<
           {
-            avg_seconds: number | null;
-            median_seconds: number | null;
-            p99_seconds: number | null;
+            avg_seconds: number | string | null;
+            median_seconds: number | string | null;
+            p90_seconds: number | string | null;
+            p95_seconds: number | string | null;
+            p99_seconds: number | string | null;
           }[]
         >`
           SELECT
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as median_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p90_seconds,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p95_seconds,
             PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p99_seconds
           FROM batches
           WHERE ${rangeClause}
@@ -247,14 +251,18 @@ export class StatsService {
         `
       : this.prisma.$queryRaw<
           {
-            avg_seconds: number | null;
-            median_seconds: number | null;
-            p99_seconds: number | null;
+            avg_seconds: number | string | null;
+            median_seconds: number | string | null;
+            p90_seconds: number | string | null;
+            p95_seconds: number | string | null;
+            p99_seconds: number | string | null;
           }[]
         >`
           SELECT
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as median_seconds,
+            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p90_seconds,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p95_seconds,
             PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p99_seconds
           FROM batches
           WHERE ${rangeClause}
@@ -263,9 +271,16 @@ export class StatsService {
         `;
 
     const [stats] = await statsQuery;
+    const normalizeStat = (value: number | string | null | undefined) => {
+      if (value === null || value === undefined) {
+        return 0;
+      }
+      const numeric = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
 
     const seriesQuery = verifiedOnly
-      ? this.prisma.$queryRaw<{ date: Date; avg_seconds: number | null }[]>`
+      ? this.prisma.$queryRaw<{ date: Date; avg_seconds: number | string | null }[]>`
           SELECT
             date_trunc('day', proven_at) as date,
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds
@@ -277,7 +292,7 @@ export class StatsService {
           GROUP BY 1
           ORDER BY 1
         `
-      : this.prisma.$queryRaw<{ date: Date; avg_seconds: number | null }[]>`
+      : this.prisma.$queryRaw<{ date: Date; avg_seconds: number | string | null }[]>`
           SELECT
             date_trunc('day', proven_at) as date,
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds
@@ -293,7 +308,9 @@ export class StatsService {
 
     const startDay = startOfUtcDay(start);
     const endDay = startOfUtcDay(end);
-    const seriesMap = new Map(seriesRows.map((row) => [dateKey(row.date), row.avg_seconds]));
+    const seriesMap = new Map(
+      seriesRows.map((row) => [dateKey(row.date), normalizeStat(row.avg_seconds)])
+    );
     const series = [];
     for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
@@ -306,9 +323,11 @@ export class StatsService {
     return {
       range: { start: dateKey(startDay), end: dateKey(endDay) },
       stats: {
-        avgSeconds: stats?.avg_seconds ?? 0,
-        medianSeconds: stats?.median_seconds ?? 0,
-        p99Seconds: stats?.p99_seconds ?? 0
+        avgSeconds: normalizeStat(stats?.avg_seconds),
+        medianSeconds: normalizeStat(stats?.median_seconds),
+        p90Seconds: normalizeStat(stats?.p90_seconds),
+        p95Seconds: normalizeStat(stats?.p95_seconds),
+        p99Seconds: normalizeStat(stats?.p99_seconds)
       },
       series
     };
@@ -324,11 +343,19 @@ export class StatsService {
       ? Prisma.sql`verified_at >= ${start} AND verified_at < ${endBoundary}`
       : Prisma.sql`verified_at >= ${start} AND verified_at <= ${endBoundary}`;
     const [stats] = await this.prisma.$queryRaw<
-      { avg_seconds: number | null; median_seconds: number | null; p99_seconds: number | null }[]
+      {
+        avg_seconds: number | string | null;
+        median_seconds: number | string | null;
+        p90_seconds: number | string | null;
+        p95_seconds: number | string | null;
+        p99_seconds: number | string | null;
+      }[]
     >`
       SELECT
         AVG(EXTRACT(EPOCH FROM verified_at - proposed_at)) as avg_seconds,
         PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as median_seconds,
+        PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as p90_seconds,
+        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as p95_seconds,
         PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as p99_seconds
       FROM batches
       WHERE ${rangeClause}
@@ -338,7 +365,7 @@ export class StatsService {
     `;
 
     const seriesRows = await this.prisma.$queryRaw<
-      { date: Date; avg_seconds: number | null }[]
+      { date: Date; avg_seconds: number | string | null }[]
     >`
       SELECT
         date_trunc('day', verified_at) as date,
@@ -354,7 +381,16 @@ export class StatsService {
 
     const startDay = startOfUtcDay(start);
     const endDay = startOfUtcDay(end);
-    const seriesMap = new Map(seriesRows.map((row) => [dateKey(row.date), row.avg_seconds]));
+    const normalizeStat = (value: number | string | null | undefined) => {
+      if (value === null || value === undefined) {
+        return 0;
+      }
+      const numeric = typeof value === "number" ? value : Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
+    const seriesMap = new Map(
+      seriesRows.map((row) => [dateKey(row.date), normalizeStat(row.avg_seconds)])
+    );
     const series = [];
     for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
@@ -367,9 +403,11 @@ export class StatsService {
     return {
       range: { start: dateKey(startDay), end: dateKey(endDay) },
       stats: {
-        avgSeconds: stats?.avg_seconds ?? 0,
-        medianSeconds: stats?.median_seconds ?? 0,
-        p99Seconds: stats?.p99_seconds ?? 0
+        avgSeconds: normalizeStat(stats?.avg_seconds),
+        medianSeconds: normalizeStat(stats?.median_seconds),
+        p90Seconds: normalizeStat(stats?.p90_seconds),
+        p95Seconds: normalizeStat(stats?.p95_seconds),
+        p99Seconds: normalizeStat(stats?.p99_seconds)
       },
       series
     };

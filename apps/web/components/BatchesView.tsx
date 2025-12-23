@@ -308,7 +308,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
         {isNonZkFilterActive && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/60 bg-slate/60 px-4 py-3 text-sm text-white/70">
             <span>
-              Showing <span className="text-accent">Not ZK Proven</span> batches in
+              Showing <span className="text-accent">Not Proven By ZK</span> batches in
               the selected range.
             </span>
             <button
