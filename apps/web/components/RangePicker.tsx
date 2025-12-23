@@ -1,9 +1,10 @@
 "use client";
 
-import { format, subDays } from "date-fns";
+import { subDays } from "date-fns";
 import clsx from "clsx";
+import { formatUtcDate } from "../lib/date";
 
-export type RangePreset = "7" | "30" | "90" | "custom";
+export type RangePreset = "1" | "7" | "30" | "90" | "custom";
 
 interface RangePickerProps {
   preset: RangePreset;
@@ -15,6 +16,7 @@ interface RangePickerProps {
 }
 
 const presets: { label: string; value: RangePreset }[] = [
+  { label: "1d", value: "1" },
   { label: "7d", value: "7" },
   { label: "30d", value: "30" },
   { label: "90d", value: "90" },
@@ -22,14 +24,18 @@ const presets: { label: string; value: RangePreset }[] = [
 ];
 
 export function resolveRange(preset: RangePreset, customStart: string, customEnd: string) {
-  const end = format(new Date(), "yyyy-MM-dd");
+  const now = new Date();
+  const end = formatUtcDate(now);
   if (preset === "custom") {
-    return { start: customStart, end: customEnd };
+    return {
+      start: customStart ? `${customStart}Z` : "",
+      end: customEnd ? `${customEnd}Z` : ""
+    };
   }
 
   const days = Number(preset);
   return {
-    start: format(subDays(new Date(), days), "yyyy-MM-dd"),
+    start: formatUtcDate(subDays(now, days)),
     end
   };
 }
@@ -62,20 +68,27 @@ export default function RangePicker({
       </div>
 
       {preset === "custom" && (
-        <div className="flex items-center gap-2 text-xs text-white/70">
-          <input
-            type="date"
-            value={customStart}
-            onChange={(event) => onCustomStartChange(event.target.value)}
-            className="rounded-md border border-line/70 bg-slate px-3 py-1"
-          />
-          <span>to</span>
-          <input
-            type="date"
-            value={customEnd}
-            onChange={(event) => onCustomEndChange(event.target.value)}
-            className="rounded-md border border-line/70 bg-slate px-3 py-1"
-          />
+        <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={customStart}
+              step={60}
+              onChange={(event) => onCustomStartChange(event.target.value)}
+              className="rounded-md border border-line/70 bg-slate px-3 py-1"
+            />
+            <span>to</span>
+            <input
+              type="datetime-local"
+              value={customEnd}
+              step={60}
+              onChange={(event) => onCustomEndChange(event.target.value)}
+              className="rounded-md border border-line/70 bg-slate px-3 py-1"
+            />
+          </div>
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+            UTC
+          </span>
         </div>
       )}
     </div>

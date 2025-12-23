@@ -31,6 +31,11 @@ const statusFilters: { label: string; value: BatchStatus | "all" }[] = [
 ];
 
 const systemFilters: ProofSystem[] = ["TEE", "SP1", "RISC0"];
+const systemLabels: Record<ProofSystem, string> = {
+  TEE: "TEE",
+  SP1: "SP1 RETH",
+  RISC0: "RISC0 RETH"
+};
 const teeLabels: Record<TeeVerifier, string> = {
   SGX_GETH: "SGX GETH",
   SGX_RETH: "SGX RETH"
@@ -68,12 +73,6 @@ const parseBoolean = (value: string | null): boolean | undefined => {
   return undefined;
 };
 
-const parseSnapshotDate = (value: string | null): string | null => {
-  if (!value) {
-    return null;
-  }
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-};
 
 function buildProofBadges(
   proofSystems: ProofSystem[],
@@ -86,7 +85,7 @@ function buildProofBadges(
     if (system === "TEE") {
       if (teeVerifiers?.length) {
         for (const tee of teeVerifiers) {
-          const label = `TEE ${teeLabels[tee] ?? tee}`;
+          const label = teeLabels[tee] ?? tee;
           if (seen.has(label)) {
             continue;
           }
@@ -105,7 +104,7 @@ function buildProofBadges(
       continue;
     }
 
-    const label = system;
+    const label = systemLabels[system] ?? system;
     if (seen.has(label)) {
       continue;
     }
@@ -178,11 +177,8 @@ export default function BatchesView({ range }: BatchesViewProps) {
     return parsed === false ? false : undefined;
   });
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
-  const snapshotDate = parseSnapshotDate(searchParams.get("snapshotDate"));
   const isNonZkFilterActive = proofType === "non-zk" && hasProof;
-  const queryRange =
-    snapshotDate && isNonZkFilterActive ? { start: snapshotDate, end: snapshotDate } : range;
-  const rangeKey = `${queryRange.start}:${queryRange.end}`;
+  const rangeKey = `${range.start}:${range.end}`;
   const previousRange = useRef(rangeKey);
 
   const pageParam = Number(searchParams.get("page"));
@@ -236,15 +232,9 @@ export default function BatchesView({ range }: BatchesViewProps) {
     }
   }, [page, rangeKey, setPageInUrl]);
 
-  const snapshotSuffix = snapshotDate
-    ? snapshotDate === range.end
-      ? `${snapshotDate} (latest day in range)`
-      : snapshotDate
-    : null;
-
   const params = useMemo(
     () => ({
-      ...queryRange,
+      ...range,
       status: status === "all" ? undefined : status,
       system: systems.length ? systems.join(",") : undefined,
       search: search || undefined,
@@ -255,7 +245,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
       dateField: dateField === "proposedAt" ? undefined : dateField,
       contested: contested === false ? false : undefined
     }),
-    [queryRange, status, systems, search, page, proofType, hasProof, dateField, contested]
+    [range, status, systems, search, page, proofType, hasProof, dateField, contested]
   );
 
   const { data } = useSWR<BatchesResponse>(
@@ -318,8 +308,8 @@ export default function BatchesView({ range }: BatchesViewProps) {
         {isNonZkFilterActive && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/60 bg-slate/60 px-4 py-3 text-sm text-white/70">
             <span>
-              Showing <span className="text-accent">Not ZK Proven</span> batches
-              {snapshotSuffix ? ` for ${snapshotSuffix}` : ""}.
+              Showing <span className="text-accent">Not ZK Proven</span> batches in
+              the selected range.
             </span>
             <button
               type="button"
@@ -344,7 +334,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
                 )}
                 onClick={() => toggleSystem(system)}
               >
-                {system}
+                {systemLabels[system]}
               </button>
             ))}
           </div>
@@ -369,9 +359,30 @@ export default function BatchesView({ range }: BatchesViewProps) {
             <tr>
               <th className="px-4 py-3">Batch</th>
               <th className="px-4 py-3">Proof Systems</th>
-              <th className="px-4 py-3">Proposed</th>
-              <th className="px-4 py-3">Proven</th>
-              <th className="px-4 py-3">Verified</th>
+              <th className="px-4 py-3">
+                <div className="flex flex-col">
+                  <span>Proposed</span>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    UTC
+                  </span>
+                </div>
+              </th>
+              <th className="px-4 py-3">
+                <div className="flex flex-col">
+                  <span>Proven</span>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    UTC
+                  </span>
+                </div>
+              </th>
+              <th className="px-4 py-3">
+                <div className="flex flex-col">
+                  <span>Verified</span>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    UTC
+                  </span>
+                </div>
+              </th>
               <th className="px-4 py-3">Status</th>
             </tr>
           </thead>
@@ -497,7 +508,7 @@ function BatchDrawer({
               />
             }
           />
-          <DetailRow label="Proposed" value={formatDateTime(batch.proposedAt)} />
+          <DetailRow label="Proposed (UTC)" value={formatDateTime(batch.proposedAt)} />
           {batch.proposedTxHash && (
             <DetailRow
               label="Proposed Tx"
@@ -506,8 +517,8 @@ function BatchDrawer({
               mono
             />
           )}
-          <DetailRow label="Proven" value={formatDateTime(batch.provenAt)} />
-          <DetailRow label="Verified" value={formatDateTime(batch.verifiedAt)} />
+          <DetailRow label="Proven (UTC)" value={formatDateTime(batch.provenAt)} />
+          <DetailRow label="Verified (UTC)" value={formatDateTime(batch.verifiedAt)} />
           {batch.verifiedTxHash && (
             <DetailRow
               label="Verified Tx"

@@ -25,12 +25,16 @@ export class BatchesService {
     const maxPageSize = 100;
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), maxPageSize);
-    const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
+    const { startDate, endDate, endIsDateOnly } = parseDateRange(
+      query.start,
+      query.end,
+      30
+    );
     const dateField = query.dateField ?? "proposedAt";
-    const dateRange = {
-      gte: startDate,
-      lt: addDays(endDate, 1)
-    };
+    const endBoundary = endIsDateOnly ? addDays(endDate, 1) : endDate;
+    const dateRange = endIsDateOnly
+      ? { gte: startDate, lt: endBoundary }
+      : { gte: startDate, lte: endBoundary };
 
     const where: Prisma.BatchWhereInput = {};
 

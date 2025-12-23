@@ -9,8 +9,12 @@ export class StatsController {
 
   @Get("zk")
   async getZkShare(@Query() query: RangeQueryDto) {
-    const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
-    return this.stats.getZkShare(startDate, endDate);
+    const { startDate, endDate, endIsDateOnly } = parseDateRange(
+      query.start,
+      query.end,
+      30
+    );
+    return this.stats.getZkShare(startDate, endDate, endIsDateOnly);
   }
 
   @Get("proof-systems")
@@ -21,9 +25,13 @@ export class StatsController {
 
   @Get("latency")
   async getLatency(@Query() query: LatencyQueryDto) {
-    const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
+    const { startDate, endDate, endIsDateOnly } = parseDateRange(
+      query.start,
+      query.end,
+      30
+    );
     const type = query.type ?? "proving";
     const verifiedOnly = query.verifiedOnly ? query.verifiedOnly === "true" : true;
-    return this.stats.getLatency(type, startDate, endDate, verifiedOnly);
+    return this.stats.getLatency(type, startDate, endDate, endIsDateOnly, verifiedOnly);
   }
 }

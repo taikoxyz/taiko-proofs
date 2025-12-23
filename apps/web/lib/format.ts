@@ -1,17 +1,30 @@
-import { format } from "date-fns";
+const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "UTC"
+});
+
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC"
+});
 
 export function formatDateTime(value?: string | null) {
   if (!value) {
     return "—";
   }
-  return format(new Date(value), "MMM d, HH:mm");
+  return dateTimeFormatter.format(new Date(value));
 }
 
 export function formatDate(value?: string | null) {
   if (!value) {
     return "—";
   }
-  return format(new Date(value), "MMM d");
+  return dateFormatter.format(new Date(value));
 }
 
 export function formatDurationSeconds(seconds?: number | null) {

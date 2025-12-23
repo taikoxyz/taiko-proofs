@@ -6,6 +6,7 @@ import {
   ZkShareResponse
 } from "@taikoproofs/shared";
 import { addDays, startOfUtcDay } from "../common/date";
+import { Prisma } from "@prisma/client";
 
 function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -102,12 +103,19 @@ export class StatsService {
     }
   }
 
-  async getZkShare(start: Date, end: Date): Promise<ZkShareResponse> {
+  async getZkShare(
+    start: Date,
+    end: Date,
+    endIsDateOnly: boolean
+  ): Promise<ZkShareResponse> {
+    const startDay = startOfUtcDay(start);
+    const endDay = startOfUtcDay(end);
+
     const dailyStats = await this.prisma.dailyStat.findMany({
       where: {
         date: {
-          gte: start,
-          lte: end
+          gte: startDay,
+          lte: endDay
         }
       },
       orderBy: { date: "asc" }
@@ -116,7 +124,7 @@ export class StatsService {
     const statsMap = new Map(dailyStats.map((row) => [dateKey(row.date), row]));
     const points = [];
 
-    for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
       const row = statsMap.get(key);
       const provenTotal = row?.provenTotal ?? 0;
@@ -131,18 +139,41 @@ export class StatsService {
       });
     }
 
+    const endBoundary = endIsDateOnly ? addDays(end, 1) : end;
+    const summaryRange = endIsDateOnly
+      ? Prisma.sql`proven_at >= ${start} AND proven_at < ${endBoundary}`
+      : Prisma.sql`proven_at >= ${start} AND proven_at <= ${endBoundary}`;
+
+    const [summaryRow] = await this.prisma.$queryRaw<
+      { proven_total: number; zk_proven_total: number }[]
+    >`
+      SELECT
+        COUNT(*)::int as proven_total,
+        SUM(CASE WHEN proof_systems && ARRAY['SP1','RISC0']::"ProofSystem"[] THEN 1 ELSE 0 END)::int as zk_proven_total
+      FROM batches
+      WHERE ${summaryRange}
+        AND is_contested = false
+        AND proposed_at IS NOT NULL
+    `;
+
     return {
-      range: { start: dateKey(start), end: dateKey(end) },
-      points
+      range: { start: dateKey(startDay), end: dateKey(endDay) },
+      points,
+      summary: {
+        provenTotal: summaryRow?.proven_total ?? 0,
+        zkProvenTotal: summaryRow?.zk_proven_total ?? 0
+      }
     };
   }
 
   async getProofSystemUsage(start: Date, end: Date): Promise<ProofSystemResponse> {
+    const startDay = startOfUtcDay(start);
+    const endDay = startOfUtcDay(end);
     const dailyStats = await this.prisma.dailyStat.findMany({
       where: {
         date: {
-          gte: start,
-          lte: end
+          gte: startDay,
+          lte: endDay
         }
       },
       orderBy: { date: "asc" }
@@ -151,7 +182,7 @@ export class StatsService {
     const statsMap = new Map(dailyStats.map((row) => [dateKey(row.date), row]));
     const points = [];
 
-    for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
       const row = statsMap.get(key);
 
@@ -166,7 +197,7 @@ export class StatsService {
     }
 
     return {
-      range: { start: dateKey(start), end: dateKey(end) },
+      range: { start: dateKey(startDay), end: dateKey(endDay) },
       points
     };
   }
@@ -175,20 +206,27 @@ export class StatsService {
     type: "proving" | "verification",
     start: Date,
     end: Date,
+    endIsDateOnly: boolean,
     verifiedOnly: boolean
   ): Promise<LatencyResponse> {
     if (type === "verification") {
-      return this.getVerificationLatency(start, end);
+      return this.getVerificationLatency(start, end, endIsDateOnly);
     }
 
-    return this.getProvingLatency(start, end, verifiedOnly);
+    return this.getProvingLatency(start, end, endIsDateOnly, verifiedOnly);
   }
 
   private async getProvingLatency(
     start: Date,
     end: Date,
+    endIsDateOnly: boolean,
     verifiedOnly: boolean
   ): Promise<LatencyResponse> {
+    const endBoundary = endIsDateOnly ? addDays(end, 1) : end;
+    const rangeClause = endIsDateOnly
+      ? Prisma.sql`proven_at >= ${start} AND proven_at < ${endBoundary}`
+      : Prisma.sql`proven_at >= ${start} AND proven_at <= ${endBoundary}`;
+
     const statsQuery = verifiedOnly
       ? this.prisma.$queryRaw<
           {
@@ -202,7 +240,7 @@ export class StatsService {
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as median_seconds,
             PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p99_seconds
           FROM batches
-          WHERE proven_at BETWEEN ${start} AND ${addDays(end, 1)}
+          WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
             AND status = 'verified'
@@ -219,7 +257,7 @@ export class StatsService {
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as median_seconds,
             PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM proven_at - proposed_at)) as p99_seconds
           FROM batches
-          WHERE proven_at BETWEEN ${start} AND ${addDays(end, 1)}
+          WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
         `;
@@ -232,7 +270,7 @@ export class StatsService {
             date_trunc('day', proven_at) as date,
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds
           FROM batches
-          WHERE proven_at BETWEEN ${start} AND ${addDays(end, 1)}
+          WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
             AND status = 'verified'
@@ -244,7 +282,7 @@ export class StatsService {
             date_trunc('day', proven_at) as date,
             AVG(EXTRACT(EPOCH FROM proven_at - proposed_at)) as avg_seconds
           FROM batches
-          WHERE proven_at BETWEEN ${start} AND ${addDays(end, 1)}
+          WHERE ${rangeClause}
             AND is_contested = false
             AND proposed_at IS NOT NULL
           GROUP BY 1
@@ -253,9 +291,11 @@ export class StatsService {
 
     const seriesRows = await seriesQuery;
 
+    const startDay = startOfUtcDay(start);
+    const endDay = startOfUtcDay(end);
     const seriesMap = new Map(seriesRows.map((row) => [dateKey(row.date), row.avg_seconds]));
     const series = [];
-    for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
       series.push({
         date: key,
@@ -264,7 +304,7 @@ export class StatsService {
     }
 
     return {
-      range: { start: dateKey(start), end: dateKey(end) },
+      range: { start: dateKey(startDay), end: dateKey(endDay) },
       stats: {
         avgSeconds: stats?.avg_seconds ?? 0,
         medianSeconds: stats?.median_seconds ?? 0,
@@ -276,8 +316,13 @@ export class StatsService {
 
   private async getVerificationLatency(
     start: Date,
-    end: Date
+    end: Date,
+    endIsDateOnly: boolean
   ): Promise<LatencyResponse> {
+    const endBoundary = endIsDateOnly ? addDays(end, 1) : end;
+    const rangeClause = endIsDateOnly
+      ? Prisma.sql`verified_at >= ${start} AND verified_at < ${endBoundary}`
+      : Prisma.sql`verified_at >= ${start} AND verified_at <= ${endBoundary}`;
     const [stats] = await this.prisma.$queryRaw<
       { avg_seconds: number | null; median_seconds: number | null; p99_seconds: number | null }[]
     >`
@@ -286,7 +331,7 @@ export class StatsService {
         PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as median_seconds,
         PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM verified_at - proposed_at)) as p99_seconds
       FROM batches
-      WHERE verified_at BETWEEN ${start} AND ${addDays(end, 1)}
+      WHERE ${rangeClause}
         AND is_contested = false
         AND proposed_at IS NOT NULL
         AND status = 'verified'
@@ -299,7 +344,7 @@ export class StatsService {
         date_trunc('day', verified_at) as date,
         AVG(EXTRACT(EPOCH FROM verified_at - proposed_at)) as avg_seconds
       FROM batches
-      WHERE verified_at BETWEEN ${start} AND ${addDays(end, 1)}
+      WHERE ${rangeClause}
         AND is_contested = false
         AND proposed_at IS NOT NULL
         AND status = 'verified'
@@ -307,9 +352,11 @@ export class StatsService {
       ORDER BY 1
     `;
 
+    const startDay = startOfUtcDay(start);
+    const endDay = startOfUtcDay(end);
     const seriesMap = new Map(seriesRows.map((row) => [dateKey(row.date), row.avg_seconds]));
     const series = [];
-    for (let cursor = new Date(start); cursor <= end; cursor = addDays(cursor, 1)) {
+    for (let cursor = new Date(startDay); cursor <= endDay; cursor = addDays(cursor, 1)) {
       const key = dateKey(cursor);
       series.push({
         date: key,
@@ -318,7 +365,7 @@ export class StatsService {
     }
 
     return {
-      range: { start: dateKey(start), end: dateKey(end) },
+      range: { start: dateKey(startDay), end: dateKey(endDay) },
       stats: {
         avgSeconds: stats?.avg_seconds ?? 0,
         medianSeconds: stats?.median_seconds ?? 0,

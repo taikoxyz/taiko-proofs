@@ -12,8 +12,16 @@ export function parseDateRange(
   start?: string,
   end?: string,
   defaultDays = 30
-): { startDate: Date; endDate: Date } {
-  const endDate = end ? startOfUtcDay(new Date(end)) : startOfUtcDay(new Date());
-  const startDate = start ? startOfUtcDay(new Date(start)) : addDays(endDate, -defaultDays);
-  return { startDate, endDate };
+): { startDate: Date; endDate: Date; endIsDateOnly: boolean } {
+  const endIsDateOnly = end ? !end.includes("T") : true;
+  const startIsDateOnly = start ? !start.includes("T") : endIsDateOnly;
+
+  const now = new Date();
+  const rawEnd = end ? new Date(end) : now;
+  const endDate = endIsDateOnly ? startOfUtcDay(rawEnd) : rawEnd;
+
+  const rawStart = start ? new Date(start) : addDays(endDate, -defaultDays);
+  const startDate = startIsDateOnly ? startOfUtcDay(rawStart) : rawStart;
+
+  return { startDate, endDate, endIsDateOnly };
 }

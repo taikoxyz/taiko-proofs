@@ -2,6 +2,8 @@ export type ProofSystem = "TEE" | "SP1" | "RISC0";
 export type TeeVerifier = "SGX_GETH" | "SGX_RETH";
 
 export type BatchStatus = "proposed" | "proven" | "verified";
+export type BatchProofType = "all" | "zk" | "non-zk";
+export type BatchDateField = "proposedAt" | "provenAt";
 
 export interface BatchSummary {
   batchId: string;
@@ -49,6 +51,10 @@ export interface ZkSharePoint {
 export interface ZkShareResponse {
   range: RangeResponse;
   points: ZkSharePoint[];
+  summary?: {
+    provenTotal: number;
+    zkProvenTotal: number;
+  };
 }
 
 export interface ProofSystemPoint {

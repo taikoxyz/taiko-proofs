@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -12,7 +12,8 @@ import {
   ResponsiveContainer,
   CartesianGrid,
   BarChart,
-  Bar
+  Bar,
+  LabelList
 } from "recharts";
 import clsx from "clsx";
 import { buildApiUrl, fetcher } from "../lib/api";
@@ -40,10 +41,10 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 const proofSystemLegend = [
-  { key: "teeSgxGeth", label: "TEE SGX GETH", color: "#57d1c9" },
-  { key: "teeSgxReth", label: "TEE SGX RETH", color: "#7ddbd2" },
-  { key: "sp1", label: "SP1", color: "#f2b84b" },
-  { key: "risc0", label: "RISC0", color: "#ec6b56" }
+  { key: "teeSgxGeth", label: "SGX GETH", color: "#57d1c9" },
+  { key: "teeSgxReth", label: "SGX RETH", color: "#3bb4c4" },
+  { key: "sp1", label: "SP1 RETH", color: "#f2b84b" },
+  { key: "risc0", label: "RISC0 RETH", color: "#ec6b56" }
 ] as const;
 
 const proofSystemLabels = proofSystemLegend.reduce<Record<string, string>>(
@@ -98,13 +99,59 @@ export default function StatsView({ range }: StatsViewProps) {
     { refreshInterval: 60000 }
   );
 
-  const latestZk = zkShare?.points?.[zkShare.points.length - 1];
-  const notZkProven = latestZk ? latestZk.provenTotal - latestZk.zkProvenTotal : null;
-  const canNavigateToNonZk =
-    typeof notZkProven === "number" && notZkProven > 0 && Boolean(latestZk?.date);
+  const rangeTotals = useMemo(() => {
+    if (!zkShare) {
+      return null;
+    }
+
+    if (zkShare.summary) {
+      return {
+        provenTotal: zkShare.summary.provenTotal,
+        zkProvenTotal: zkShare.summary.zkProvenTotal
+      };
+    }
+
+    if (!zkShare.points?.length) {
+      return null;
+    }
+
+    return zkShare.points.reduce(
+      (acc, point) => ({
+        provenTotal: acc.provenTotal + point.provenTotal,
+        zkProvenTotal: acc.zkProvenTotal + point.zkProvenTotal
+      }),
+      { provenTotal: 0, zkProvenTotal: 0 }
+    );
+  }, [zkShare]);
+
+  const rangeZkPercent =
+    rangeTotals && rangeTotals.provenTotal
+      ? (rangeTotals.zkProvenTotal / rangeTotals.provenTotal) * 100
+      : rangeTotals
+        ? 0
+        : null;
+  const notZkProven = rangeTotals
+    ? rangeTotals.provenTotal - rangeTotals.zkProvenTotal
+    : null;
+  const canNavigateToNonZk = typeof notZkProven === "number" && notZkProven > 0;
+
+  const proofSystemData = useMemo(() => {
+    if (!proofSystems?.points) {
+      return null;
+    }
+
+    return proofSystems.points.map((point) => ({
+      ...point,
+      total:
+        point.teeSgxGeth +
+        point.teeSgxReth +
+        point.sp1 +
+        point.risc0
+    }));
+  }, [proofSystems]);
 
   const handleNonZkClick = () => {
-    if (!canNavigateToNonZk || !latestZk?.date) {
+    if (!canNavigateToNonZk) {
       return;
     }
 
@@ -114,7 +161,6 @@ export default function StatsView({ range }: StatsViewProps) {
     params.set("hasProof", "true");
     params.set("dateField", "provenAt");
     params.set("contested", "false");
-    params.set("snapshotDate", latestZk.date);
     params.delete("page");
     const query = params.toString();
     router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -126,7 +172,7 @@ export default function StatsView({ range }: StatsViewProps) {
         <div className="card">
           <SectionHeader
             title="ZK Proven Share"
-            description="Daily percent of batches proven with SP1 or Risc0."
+            description="Daily percent of batches proven with SP1 RETH or RISC0 RETH."
           />
           <div className="mt-6 h-64">
             {zkShare ? (
@@ -172,27 +218,30 @@ export default function StatsView({ range }: StatsViewProps) {
               <LoadingCard />
             )}
           </div>
+          <div className="mt-2 text-right text-[10px] uppercase tracking-[0.2em] text-white/40">
+            UTC
+          </div>
         </div>
 
         <div className="card flex flex-col justify-between">
           <SectionHeader
-            title="Latest Snapshot"
-            description="Latest day across the selected range."
+            title="Range Summary"
+            description="Totals across the selected range."
           />
           <div className="mt-6 space-y-4">
             <div>
               <p className="label">ZK Share</p>
               <p className="mt-2 font-display text-3xl text-white">
-                {latestZk ? formatPercent(latestZk.zkPercent) : "—"}
+                {rangeZkPercent !== null ? formatPercent(rangeZkPercent) : "—"}
               </p>
             </div>
             <div className="flex items-center justify-between text-sm text-white/70">
               <span>ZK Proven</span>
-              <span>{latestZk?.zkProvenTotal ?? "—"}</span>
+              <span>{rangeTotals?.zkProvenTotal ?? "—"}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-white/70">
               <span>Total Proven</span>
-              <span>{latestZk?.provenTotal ?? "—"}</span>
+              <span>{rangeTotals?.provenTotal ?? "—"}</span>
             </div>
             <button
               type="button"
@@ -212,7 +261,7 @@ export default function StatsView({ range }: StatsViewProps) {
                 </span>
                 {canNavigateToNonZk && (
                   <span className="text-[10px] uppercase tracking-[0.2em] text-accent group-hover:text-accentSoft">
-                    View Batches
+                    View Batches >
                   </span>
                 )}
               </span>
@@ -227,9 +276,9 @@ export default function StatsView({ range }: StatsViewProps) {
           description="Each batch contributes to every proof system used. TEE usage is split by verifier type."
         />
         <div className="mt-6 h-72">
-          {proofSystems ? (
+          {proofSystemData ? (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={proofSystems.points} margin={{ left: 0, right: 16 }}>
+              <BarChart data={proofSystemData} margin={{ left: 0, right: 16 }}>
                 <CartesianGrid stroke="#1f2a30" strokeDasharray="4 4" />
                 <XAxis dataKey="date" tick={{ fill: "#7a8a94", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#7a8a94", fontSize: 12 }} />
@@ -246,9 +295,16 @@ export default function StatsView({ range }: StatsViewProps) {
                   labelStyle={{ color: "#9fb0ba" }}
                 />
                 <Bar dataKey="teeSgxGeth" stackId="proof" fill="#57d1c9" />
-                <Bar dataKey="teeSgxReth" stackId="proof" fill="#7ddbd2" />
+                <Bar dataKey="teeSgxReth" stackId="proof" fill="#3bb4c4" />
                 <Bar dataKey="sp1" stackId="proof" fill="#f2b84b" />
-                <Bar dataKey="risc0" stackId="proof" fill="#ec6b56" />
+                <Bar dataKey="risc0" stackId="proof" fill="#ec6b56">
+                  <LabelList
+                    dataKey="total"
+                    position="top"
+                    fill="#9fb0ba"
+                    fontSize={11}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -265,6 +321,9 @@ export default function StatsView({ range }: StatsViewProps) {
               <span>{item.label}</span>
             </div>
           ))}
+        </div>
+        <div className="mt-2 text-right text-[10px] uppercase tracking-[0.2em] text-white/40">
+          UTC
         </div>
       </section>
 
@@ -341,6 +400,9 @@ export default function StatsView({ range }: StatsViewProps) {
             ) : (
               <LoadingCard />
             )}
+          </div>
+          <div className="mt-2 text-right text-[10px] uppercase tracking-[0.2em] text-white/40">
+            UTC
           </div>
         </div>
       </section>

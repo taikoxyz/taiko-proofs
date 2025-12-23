@@ -4,7 +4,8 @@ import { PrismaService } from "../src/prisma/prisma.service";
 const prismaStub = {
   dailyStat: {
     findMany: jest.fn()
-  }
+  },
+  $queryRaw: jest.fn()
 };
 
 describe("StatsService", () => {
@@ -20,11 +21,18 @@ describe("StatsService", () => {
         zkProvenTotal: 7
       }
     ]);
+    prismaStub.$queryRaw.mockResolvedValue([
+      {
+        proven_total: 10,
+        zk_proven_total: 7
+      }
+    ]);
 
     const service = new StatsService(prismaStub as unknown as PrismaService);
     const result = await service.getZkShare(
       new Date("2024-01-01T00:00:00Z"),
-      new Date("2024-01-02T00:00:00Z")
+      new Date("2024-01-02T00:00:00Z"),
+      true
     );
 
     expect(result.points).toHaveLength(2);
@@ -39,6 +47,10 @@ describe("StatsService", () => {
       provenTotal: 10,
       zkProvenTotal: 7,
       zkPercent: 70
+    });
+    expect(result.summary).toEqual({
+      provenTotal: 10,
+      zkProvenTotal: 7
     });
   });
 

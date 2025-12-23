@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { format, subDays } from "date-fns";
+import { subDays } from "date-fns";
 import RangePicker, { RangePreset, resolveRange } from "./RangePicker";
 import StatsView from "./StatsView";
 import BatchesView from "./BatchesView";
 import clsx from "clsx";
+import { formatUtcDateTime } from "../lib/date";
 
 const tabs = [
   { id: "stats", label: "Stats" },
@@ -22,9 +23,9 @@ export default function Dashboard() {
   const activeTab: TabId = searchParams.get("tab") === "batches" ? "batches" : "stats";
   const [preset, setPreset] = useState<RangePreset>("30");
   const [customStart, setCustomStart] = useState(
-    format(subDays(new Date(), 30), "yyyy-MM-dd")
+    formatUtcDateTime(subDays(new Date(), 30))
   );
-  const [customEnd, setCustomEnd] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [customEnd, setCustomEnd] = useState(formatUtcDateTime(new Date()));
 
   const range = useMemo(
     () => resolveRange(preset, customStart, customEnd),
