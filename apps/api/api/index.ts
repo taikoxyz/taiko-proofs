@@ -2,12 +2,11 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { ExpressAdapter } from "@nestjs/platform-express";
-import serverless from "serverless-http";
 import express from "express";
 import { AppModule } from "../src/app.module";
 
 const expressApp = express();
-let cachedHandler: serverless.Handler | null = null;
+let cachedApp: express.Express | null = null;
 
 function hostFromUrl(value: string | undefined): string | null {
   if (!value) {
@@ -34,7 +33,7 @@ function logEnvSummary() {
   });
 }
 
-async function bootstrap(): Promise<serverless.Handler> {
+async function bootstrap(): Promise<express.Express> {
   const start = Date.now();
   logEnvSummary();
   console.log("[bootstrap] starting Nest app");
@@ -55,7 +54,7 @@ async function bootstrap(): Promise<serverless.Handler> {
     console.log("[bootstrap] initializing Nest app");
     await app.init();
     console.log(`[bootstrap] Nest app ready in ${Date.now() - start}ms`);
-    return serverless(expressApp);
+    return expressApp;
   } catch (error) {
     console.error("[bootstrap] Nest app failed to initialize", error);
     throw error;
@@ -63,9 +62,9 @@ async function bootstrap(): Promise<serverless.Handler> {
 }
 
 export default async function handler(req: express.Request, res: express.Response) {
-  if (!cachedHandler) {
-    cachedHandler = await bootstrap();
+  if (!cachedApp) {
+    cachedApp = await bootstrap();
   }
 
-  return cachedHandler(req, res);
+  return cachedApp(req, res);
 }
