@@ -6,10 +6,13 @@ import {
   BatchDetailResponse,
   BatchesResponse,
   BatchSummary,
+  ProofSystem,
   TeeVerifier
 } from "@taikoproofs/shared";
 import { AppConfigService } from "../config/app-config.service";
 import { Prisma } from "@prisma/client";
+
+const zkProofSystems: ProofSystem[] = ["SP1", "RISC0"];
 
 @Injectable()
 export class BatchesService {
@@ -23,22 +26,64 @@ export class BatchesService {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), maxPageSize);
     const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
-
-    const where: Prisma.BatchWhereInput = {
-      proposedAt: {
-        gte: startDate,
-        lt: addDays(endDate, 1)
-      }
+    const dateField = query.dateField ?? "proposedAt";
+    const dateRange = {
+      gte: startDate,
+      lt: addDays(endDate, 1)
     };
+
+    const where: Prisma.BatchWhereInput = {};
+
+    if (dateField === "provenAt") {
+      where.provenAt = dateRange;
+    } else {
+      where.proposedAt = dateRange;
+    }
 
     if (query.status) {
       where.status = query.status;
     }
 
-    if (query.system?.length) {
-      where.proofSystems = {
-        hasSome: query.system
+    if (query.contested === false) {
+      where.isContested = false;
+    }
+
+    if (query.hasProof && dateField !== "provenAt") {
+      where.provenAt = {
+        not: null
       };
+    }
+
+    const andFilters: Prisma.BatchWhereInput[] = [];
+
+    if (query.system?.length) {
+      andFilters.push({
+        proofSystems: {
+          hasSome: query.system
+        }
+      });
+    }
+
+    if (query.proofType === "zk") {
+      andFilters.push({
+        proofSystems: {
+          hasSome: zkProofSystems
+        }
+      });
+    }
+
+    if (query.proofType === "non-zk") {
+      andFilters.push({
+        NOT: {
+          proofSystems: {
+            hasSome: zkProofSystems
+          }
+        }
+      });
+    }
+
+    if (andFilters.length) {
+      where.AND = andFilters;
     }
 
     if (query.search) {

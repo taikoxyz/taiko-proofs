@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
   LineChart,
@@ -60,6 +61,9 @@ function LoadingCard() {
 }
 
 export default function StatsView({ range }: StatsViewProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [verifiedOnly, setVerifiedOnly] = useState(true);
 
   const { data: zkShare } = useSWR<ZkShareResponse>(
@@ -95,6 +99,26 @@ export default function StatsView({ range }: StatsViewProps) {
   );
 
   const latestZk = zkShare?.points?.[zkShare.points.length - 1];
+  const notZkProven = latestZk ? latestZk.provenTotal - latestZk.zkProvenTotal : null;
+  const canNavigateToNonZk =
+    typeof notZkProven === "number" && notZkProven > 0 && Boolean(latestZk?.date);
+
+  const handleNonZkClick = () => {
+    if (!canNavigateToNonZk || !latestZk?.date) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "batches");
+    params.set("proofType", "non-zk");
+    params.set("hasProof", "true");
+    params.set("dateField", "provenAt");
+    params.set("contested", "false");
+    params.set("snapshotDate", latestZk.date);
+    params.delete("page");
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   return (
     <div className="flex flex-col gap-10">
@@ -170,6 +194,29 @@ export default function StatsView({ range }: StatsViewProps) {
               <span>Total Proven</span>
               <span>{latestZk?.provenTotal ?? "—"}</span>
             </div>
+            <button
+              type="button"
+              onClick={handleNonZkClick}
+              disabled={!canNavigateToNonZk}
+              className={clsx(
+                "group flex w-full items-center justify-between rounded-xl border px-3 py-2 text-sm transition",
+                canNavigateToNonZk
+                  ? "border-line/60 bg-slate/60 text-white/80 hover:border-accent/60 hover:bg-slate"
+                  : "cursor-default border-line/40 bg-slate/40 text-white/60"
+              )}
+            >
+              <span>Not ZK Proven</span>
+              <span className="flex items-center gap-3">
+                <span className={clsx("font-medium", canNavigateToNonZk ? "text-white" : "text-white/70")}>
+                  {notZkProven ?? "—"}
+                </span>
+                {canNavigateToNonZk && (
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-accent group-hover:text-accentSoft">
+                    View Batches
+                  </span>
+                )}
+              </span>
+            </button>
           </div>
         </div>
       </section>

@@ -1,9 +1,26 @@
 import { Transform } from "class-transformer";
-import { IsISO8601, IsIn, IsInt, IsOptional, Min } from "class-validator";
-import { BatchStatus, ProofSystem } from "@taikoproofs/shared";
+import { IsBoolean, IsISO8601, IsIn, IsInt, IsOptional, Min } from "class-validator";
+import {
+  BatchDateField,
+  BatchProofType,
+  BatchStatus,
+  ProofSystem
+} from "@taikoproofs/shared";
 
 const batchStatusValues: BatchStatus[] = ["proposed", "proven", "verified"];
 const proofSystemValues: ProofSystem[] = ["TEE", "SP1", "RISC0"];
+const proofTypeValues: BatchProofType[] = ["all", "zk", "non-zk"];
+const dateFieldValues: BatchDateField[] = ["proposedAt", "provenAt"];
+
+const toBoolean = ({ value }: { value: unknown }) => {
+  if (value === "true" || value === true) {
+    return true;
+  }
+  if (value === "false" || value === false) {
+    return false;
+  }
+  return value;
+};
 
 export class BatchesQueryDto {
   @IsOptional()
@@ -16,6 +33,24 @@ export class BatchesQueryDto {
   )
   @IsIn(proofSystemValues, { each: true })
   system?: ProofSystem[];
+
+  @IsOptional()
+  @IsIn(proofTypeValues)
+  proofType?: BatchProofType;
+
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  hasProof?: boolean;
+
+  @IsOptional()
+  @IsIn(dateFieldValues)
+  dateField?: BatchDateField;
+
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  contested?: boolean;
 
   @IsOptional()
   search?: string;

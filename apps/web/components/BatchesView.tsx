@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import useSWR from "swr";
 import clsx from "clsx";
 import {
+  BatchDateField,
   BatchDetailResponse,
+  BatchProofType,
   BatchStatus,
   BatchesResponse,
   ProofSystem,
@@ -43,6 +45,34 @@ const proofBadgeStyles: Record<ProofBadgeTone, string> = {
   teeReth: "border-mint/40 bg-mint/20 text-mint",
   sp1: "border-accentSoft/50 bg-accent/10 text-accent",
   risc0: "border-[#ec6b56]/40 bg-[#ec6b56]/10 text-[#ec6b56]"
+};
+
+const parseProofType = (value: string | null): BatchProofType => {
+  if (value === "zk" || value === "non-zk" || value === "all") {
+    return value;
+  }
+  return "all";
+};
+
+const parseDateField = (value: string | null): BatchDateField => {
+  return value === "provenAt" ? "provenAt" : "proposedAt";
+};
+
+const parseBoolean = (value: string | null): boolean | undefined => {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return undefined;
+};
+
+const parseSnapshotDate = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 };
 
 function buildProofBadges(
@@ -134,8 +164,25 @@ export default function BatchesView({ range }: BatchesViewProps) {
   const [status, setStatus] = useState<BatchStatus | "all">("all");
   const [systems, setSystems] = useState<ProofSystem[]>([]);
   const [search, setSearch] = useState("");
+  const [proofType, setProofType] = useState<BatchProofType>(() =>
+    parseProofType(searchParams.get("proofType"))
+  );
+  const [hasProof, setHasProof] = useState<boolean>(
+    () => parseBoolean(searchParams.get("hasProof")) ?? false
+  );
+  const [dateField, setDateField] = useState<BatchDateField>(() =>
+    parseDateField(searchParams.get("dateField"))
+  );
+  const [contested, setContested] = useState<boolean | undefined>(() => {
+    const parsed = parseBoolean(searchParams.get("contested"));
+    return parsed === false ? false : undefined;
+  });
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
-  const rangeKey = `${range.start}:${range.end}`;
+  const snapshotDate = parseSnapshotDate(searchParams.get("snapshotDate"));
+  const isNonZkFilterActive = proofType === "non-zk" && hasProof;
+  const queryRange =
+    snapshotDate && isNonZkFilterActive ? { start: snapshotDate, end: snapshotDate } : range;
+  const rangeKey = `${queryRange.start}:${queryRange.end}`;
   const previousRange = useRef(rangeKey);
 
   const pageParam = Number(searchParams.get("page"));
@@ -162,6 +209,24 @@ export default function BatchesView({ range }: BatchesViewProps) {
     [pathname, router, searchParams]
   );
 
+  const clearNonZkFilter = () => {
+    setProofType("all");
+    setHasProof(false);
+    setDateField("proposedAt");
+    setContested(undefined);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("proofType");
+    params.delete("hasProof");
+    params.delete("dateField");
+    params.delete("contested");
+    params.delete("snapshotDate");
+    params.delete("page");
+    params.set("tab", "batches");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   useEffect(() => {
     if (previousRange.current !== rangeKey) {
       previousRange.current = rangeKey;
@@ -171,16 +236,26 @@ export default function BatchesView({ range }: BatchesViewProps) {
     }
   }, [page, rangeKey, setPageInUrl]);
 
+  const snapshotSuffix = snapshotDate
+    ? snapshotDate === range.end
+      ? `${snapshotDate} (latest day in range)`
+      : snapshotDate
+    : null;
+
   const params = useMemo(
     () => ({
-      ...range,
+      ...queryRange,
       status: status === "all" ? undefined : status,
       system: systems.length ? systems.join(",") : undefined,
       search: search || undefined,
       page,
-      pageSize: PAGE_SIZE
+      pageSize: PAGE_SIZE,
+      proofType: proofType === "all" ? undefined : proofType,
+      hasProof: hasProof ? true : undefined,
+      dateField: dateField === "proposedAt" ? undefined : dateField,
+      contested: contested === false ? false : undefined
     }),
-    [range, status, systems, search, page]
+    [queryRange, status, systems, search, page, proofType, hasProof, dateField, contested]
   );
 
   const { data } = useSWR<BatchesResponse>(
@@ -239,6 +314,22 @@ export default function BatchesView({ range }: BatchesViewProps) {
             ))}
           </div>
         </div>
+
+        {isNonZkFilterActive && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/60 bg-slate/60 px-4 py-3 text-sm text-white/70">
+            <span>
+              Showing <span className="text-accent">Not ZK Proven</span> batches
+              {snapshotSuffix ? ` for ${snapshotSuffix}` : ""}.
+            </span>
+            <button
+              type="button"
+              className="rounded-full border border-line/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/60 hover:text-white"
+              onClick={clearNonZkFilter}
+            >
+              Show all batches
+            </button>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
