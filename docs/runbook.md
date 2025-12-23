@@ -16,8 +16,9 @@
    - Web: `pnpm --filter @taikoproofs/web dev`
 
 ## Indexing
-- One-off backfill: `pnpm --filter @taikoproofs/api indexer`
+- One-off indexer run: `pnpm --filter @taikoproofs/api indexer`
 - Vercel cron will call `GET /admin/index` every minute.
+- Batches verified before `START_BLOCK` are stored as verified-only and may show limited details.
 
 ## Vercel setup
 - Create two projects with explicit roots:

@@ -117,7 +117,8 @@ export class BatchesService {
       proposedAt: batch.proposedAt.toISOString(),
       provenAt: batch.provenAt?.toISOString() ?? null,
       verifiedAt: batch.verifiedAt?.toISOString() ?? null,
-      isContested: batch.isContested
+      isContested: batch.isContested,
+      isLegacy: batch.isLegacy
     }));
 
     return {
@@ -175,7 +176,8 @@ export class BatchesService {
         transitionBlockHash: batch.transitionBlockHash,
         transitionStateRoot: batch.transitionStateRoot,
         proofLinks,
-        isContested: batch.isContested
+        isContested: batch.isContested,
+        isLegacy: batch.isLegacy
       }
     };
   }

@@ -15,6 +15,7 @@ export interface BatchSummary {
   provenAt?: string | null;
   verifiedAt?: string | null;
   isContested?: boolean;
+  isLegacy?: boolean;
 }
 
 export interface BatchDetail extends BatchSummary {

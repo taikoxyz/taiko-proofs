@@ -148,7 +148,7 @@ taikoproofs/
     api/prisma/        # Prisma schema and migrations
   packages/
     shared/            # DTOs and shared types
-  scripts/             # Local tooling (seed/backfill)
+  scripts/             # Local tooling (seed/indexer)
   docs/
     runbook.md
 ```

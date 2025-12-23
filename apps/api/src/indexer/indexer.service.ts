@@ -67,17 +67,35 @@ export class IndexerService {
         ? lastProcessed - BigInt(this.config.reorgBuffer)
         : BigInt(startBlock);
 
+    const chunkSize = BigInt(this.config.indexerChunkSize);
+
     if (safeBlock <= fromBlock) {
       this.logger.log("No new blocks to index");
       return { fromBlock, toBlock: safeBlock, processed: 0 };
     }
 
-    const chunkSize = BigInt(this.config.indexerChunkSize);
     let processed = 0;
+    const totalRanges = (safeBlock - fromBlock) / chunkSize + 1n;
+    let rangeIndex = 1n;
+    const runStartedAt = Date.now();
+
+    this.logger.log(
+      `Indexing ${totalRanges.toString()} range(s) from ${fromBlock} to ${safeBlock} (chunk ${chunkSize}).`
+    );
 
     for (let cursor = fromBlock; cursor <= safeBlock; cursor += chunkSize) {
       const toBlock = cursor + chunkSize - 1n > safeBlock ? safeBlock : cursor + chunkSize - 1n;
-      processed += await this.processRange(cursor, toBlock);
+      const rangeStartedAt = Date.now();
+      this.logger.log(
+        `Processing range ${rangeIndex.toString()}/${totalRanges.toString()}: ${cursor} -> ${toBlock}.`
+      );
+      const processedInRange = await this.processRange(cursor, toBlock);
+      processed += processedInRange;
+
+      const rangeDurationSeconds = ((Date.now() - rangeStartedAt) / 1000).toFixed(1);
+      this.logger.log(
+        `Processed range ${cursor} -> ${toBlock}: ${processedInRange} event(s) in ${rangeDurationSeconds}s.`
+      );
 
       await this.prisma.indexingState.upsert({
         where: { chainId: this.config.chainId },
@@ -89,10 +107,16 @@ export class IndexerService {
           lastProcessedBlock: toBlock
         }
       });
+
+      rangeIndex += 1n;
     }
 
-    await this.backfillMissingEvents(fromBlock, safeBlock);
     await this.stats.refreshDailyStats(this.config.statsLookbackDays);
+
+    const runDurationSeconds = ((Date.now() - runStartedAt) / 1000).toFixed(1);
+    this.logger.log(
+      `Indexing run complete: processed ${processed} event(s) in ${runDurationSeconds}s.`
+    );
 
     return { fromBlock, toBlock: safeBlock, processed };
   }
@@ -311,13 +335,15 @@ export class IndexerService {
         proposedBlock,
         proposedTxHash,
         proposer,
-        status: "proposed"
+        status: "proposed",
+        isLegacy: false
       },
       update: {
         proposedAt: normalizedProposedAt,
         proposedBlock,
         proposer,
-        ...(proposedTxHash ? { proposedTxHash } : {})
+        ...(proposedTxHash ? { proposedTxHash } : {}),
+        isLegacy: false
       }
     });
 
@@ -448,7 +474,8 @@ export class IndexerService {
           provenBlock: payload.provenBlock,
           transitionParentHash: payload.transitionParentHash,
           transitionBlockHash: payload.transitionBlockHash,
-          transitionStateRoot: payload.transitionStateRoot
+          transitionStateRoot: payload.transitionStateRoot,
+          isLegacy: false
         }
       });
       return { matchesVerified: false };
@@ -471,7 +498,8 @@ export class IndexerService {
             provenBlock: payload.provenBlock,
             transitionParentHash: payload.transitionParentHash,
             transitionBlockHash: payload.transitionBlockHash,
-            transitionStateRoot: payload.transitionStateRoot
+            transitionStateRoot: payload.transitionStateRoot,
+            isLegacy: false
           }
         });
       }
@@ -497,7 +525,8 @@ export class IndexerService {
         provenBlock: payload.provenBlock,
         transitionParentHash: payload.transitionParentHash,
         transitionBlockHash: payload.transitionBlockHash,
-        transitionStateRoot: payload.transitionStateRoot
+        transitionStateRoot: payload.transitionStateRoot,
+        isLegacy: false
       }
     });
     return { matchesVerified: false };
@@ -551,6 +580,7 @@ export class IndexerService {
           proposedBlock: verifiedBlock,
           proposer: ZERO_ADDRESS,
           status: "verified",
+          isLegacy: true,
           verifiedAt,
           verifiedBlock,
           verifiedTxHash,
@@ -612,7 +642,8 @@ export class IndexerService {
           provenBlock: proof.provenBlock,
           transitionParentHash: proof.transitionParentHash,
           transitionBlockHash: proof.transitionBlockHash,
-          transitionStateRoot: proof.transitionStateRoot
+          transitionStateRoot: proof.transitionStateRoot,
+          isLegacy: false
         }
       });
     }
@@ -656,74 +687,6 @@ export class IndexerService {
         isContested: true
       }
     });
-  }
-
-  private async findIncompleteBatches(
-    fromBlock: bigint,
-    toBlock: bigint
-  ): Promise<bigint[]> {
-    const rows = await this.prisma.batch.findMany({
-      where: {
-        status: { in: ["proven", "verified"] },
-        AND: [
-          { OR: [{ proofTxHash: null }, { proposer: ZERO_ADDRESS }] },
-          {
-            OR: [
-              { provenBlock: { gte: fromBlock, lte: toBlock } },
-              { verifiedBlock: { gte: fromBlock, lte: toBlock } }
-            ]
-          }
-        ]
-      },
-      select: { batchId: true }
-    });
-
-    return rows.map((row) => row.batchId);
-  }
-
-  private async backfillMissingEvents(
-    fromBlock: bigint,
-    toBlock: bigint
-  ): Promise<void> {
-    if (fromBlock <= 1n) {
-      return;
-    }
-
-    let missing = await this.findIncompleteBatches(fromBlock, toBlock);
-    if (!missing.length) {
-      return;
-    }
-
-    this.logger.warn(
-      `Backfilling ${missing.length} batch(es) missing proposal/proof events before block ${fromBlock}`
-    );
-
-    const chunkSize = BigInt(this.config.indexerChunkSize);
-    let cursor = fromBlock - 1n;
-    let ranges = 0;
-
-    while (cursor > 0n && missing.length) {
-      const backfillFrom =
-        cursor > chunkSize ? cursor - chunkSize + 1n : 0n;
-
-      await this.processRange(backfillFrom, cursor);
-      ranges += 1;
-
-      missing = await this.findIncompleteBatches(fromBlock, toBlock);
-
-      if (backfillFrom === 0n) {
-        break;
-      }
-      cursor = backfillFrom - 1n;
-    }
-
-    if (missing.length) {
-      this.logger.warn(
-        `Backfill still missing ${missing.length} batch(es) after scanning earlier ranges`
-      );
-    } else {
-      this.logger.log(`Backfill filled missing events after ${ranges} range(s).`);
-    }
   }
 
   private async getLogsSafe(

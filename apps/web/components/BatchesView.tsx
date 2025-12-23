@@ -410,7 +410,10 @@ export default function BatchesView({ range }: BatchesViewProps) {
                   {formatDateTime(batch.verifiedAt)}
                 </td>
                 <td className="px-4 py-3">
-                  <StatusBadge status={batch.status} contested={batch.isContested} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={batch.status} contested={batch.isContested} />
+                    {batch.isLegacy && <LegacyBadge />}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -476,6 +479,17 @@ function StatusBadge({ status, contested }: { status: BatchStatus; contested?: b
   );
 }
 
+function LegacyBadge() {
+  return (
+    <span
+      title="Verified on-chain before our indexer start block; proposal/proof details were not ingested."
+      className="rounded-full border border-amber-400/50 bg-amber-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-amber-200"
+    >
+      Legacy
+    </span>
+  );
+}
+
 function BatchDrawer({
   batch,
   onClose
@@ -495,6 +509,13 @@ function BatchDrawer({
             Close
           </button>
         </div>
+
+        {batch.isLegacy && (
+          <div className="mt-4 rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Verified-only batch. Proposal and proof details predate the indexer start
+            block and were not ingested.
+          </div>
+        )}
 
         <div className="mt-6 space-y-4 text-sm text-white/70">
           <DetailRow label="Proposer" value={batch.proposer} mono />

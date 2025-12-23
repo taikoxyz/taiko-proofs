@@ -40,6 +40,7 @@ model Batch {
   transitionBlockHash    String?    @map("transition_block_hash") @db.VarChar(66)
   transitionStateRoot    String?    @map("transition_state_root") @db.VarChar(66)
   isContested            Boolean    @default(false) @map("is_contested")
+  isLegacy               Boolean    @default(false) @map("is_legacy")
   createdAt              DateTime   @default(now()) @map("created_at")
   updatedAt              DateTime   @updatedAt @map("updated_at")
 
