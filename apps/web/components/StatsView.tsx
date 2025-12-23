@@ -261,7 +261,7 @@ export default function StatsView({ range }: StatsViewProps) {
                 </span>
                 {canNavigateToNonZk && (
                   <span className="text-[10px] uppercase tracking-[0.2em] text-accent group-hover:text-accentSoft">
-                    View Batches >
+                    View Batches{" >"}
                   </span>
                 )}
               </span>
