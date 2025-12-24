@@ -17,7 +17,7 @@
 
 ## Indexing
 - One-off indexer run: `pnpm --filter @taikoproofs/api indexer`
-- Vercel cron will call `GET /admin/index` every minute.
+- Vercel cron will call `GET /admin/index` every 10 minutes.
 - Batches verified before `START_BLOCK` are stored as verified-only and may show limited details.
 
 ## Vercel setup

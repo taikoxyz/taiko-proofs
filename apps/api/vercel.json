@@ -3,6 +3,6 @@
     { "src": "/(.*)", "dest": "/api/index.ts" }
   ],
   "crons": [
-    { "path": "/admin/index", "schedule": "*/1 * * * *" }
+    { "path": "/admin/index", "schedule": "*/10 * * * *" }
   ]
 }

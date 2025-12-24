@@ -121,7 +121,7 @@ Notes:
 
 Chunking:
 - Each index run processes `fromBlock..toBlock` in chunks (e.g., 2k-5k blocks).
-- Vercel cron calls the API endpoint every minute to keep data fresh.
+- Vercel cron calls the API endpoint every 10 minutes to keep data fresh.
 
 ## API Surface
 - `GET /stats/zk?start&end`
