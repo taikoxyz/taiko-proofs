@@ -30,7 +30,6 @@ const statusFilters: { label: string; value: BatchStatus | "all" }[] = [
   { label: "Verified", value: "verified" }
 ];
 
-const systemFilters: ProofSystem[] = ["TEE", "SP1", "RISC0"];
 const systemLabels: Record<ProofSystem, string> = {
   TEE: "TEE",
   SP1: "SP1 RETH",
@@ -40,6 +39,16 @@ const teeLabels: Record<TeeVerifier, string> = {
   SGX_GETH: "SGX GETH",
   SGX_RETH: "SGX RETH"
 };
+type ProofFilterOption =
+  | { type: "system"; value: ProofSystem; label: string }
+  | { type: "tee"; value: TeeVerifier; label: string };
+
+const proofFilters: ProofFilterOption[] = [
+  { type: "tee", value: "SGX_GETH", label: teeLabels.SGX_GETH },
+  { type: "tee", value: "SGX_RETH", label: teeLabels.SGX_RETH },
+  { type: "system", value: "SP1", label: systemLabels.SP1 },
+  { type: "system", value: "RISC0", label: systemLabels.RISC0 }
+];
 const PAGE_SIZE = 20;
 
 type ProofBadgeTone = "tee" | "teeGeth" | "teeReth" | "sp1" | "risc0";
@@ -162,6 +171,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<BatchStatus | "all">("all");
   const [systems, setSystems] = useState<ProofSystem[]>([]);
+  const [teeVerifiers, setTeeVerifiers] = useState<TeeVerifier[]>([]);
   const [search, setSearch] = useState("");
   const [proofType, setProofType] = useState<BatchProofType>(() =>
     parseProofType(searchParams.get("proofType"))
@@ -237,6 +247,7 @@ export default function BatchesView({ range }: BatchesViewProps) {
       ...range,
       status: status === "all" ? undefined : status,
       system: systems.length ? systems.join(",") : undefined,
+      teeVerifier: teeVerifiers.length ? teeVerifiers.join(",") : undefined,
       search: search || undefined,
       page,
       pageSize: PAGE_SIZE,
@@ -245,7 +256,18 @@ export default function BatchesView({ range }: BatchesViewProps) {
       dateField: dateField === "proposedAt" ? undefined : dateField,
       contested: contested === false ? false : undefined
     }),
-    [range, status, systems, search, page, proofType, hasProof, dateField, contested]
+    [
+      range,
+      status,
+      systems,
+      teeVerifiers,
+      search,
+      page,
+      proofType,
+      hasProof,
+      dateField,
+      contested
+    ]
   );
 
   const { data } = useSWR<BatchesResponse>(
@@ -262,10 +284,20 @@ export default function BatchesView({ range }: BatchesViewProps) {
   const currentPage = data?.page ?? page;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
-  const toggleSystem = (system: ProofSystem) => {
-    setSystems((prev) =>
-      prev.includes(system) ? prev.filter((item) => item !== system) : [...prev, system]
-    );
+  const toggleProofFilter = (filter: ProofFilterOption) => {
+    if (filter.type === "system") {
+      setSystems((prev) =>
+        prev.includes(filter.value)
+          ? prev.filter((item) => item !== filter.value)
+          : [...prev, filter.value]
+      );
+    } else {
+      setTeeVerifiers((prev) =>
+        prev.includes(filter.value)
+          ? prev.filter((item) => item !== filter.value)
+          : [...prev, filter.value]
+      );
+    }
     if (page !== 1) {
       setPageInUrl(1, "replace");
     }
@@ -323,20 +355,26 @@ export default function BatchesView({ range }: BatchesViewProps) {
 
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            {systemFilters.map((system) => (
-              <button
-                key={system}
-                className={clsx(
-                  "rounded-full border px-4 py-2 text-xs uppercase tracking-[0.2em] transition",
-                  systems.includes(system)
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-line/70 bg-slate text-white/60"
-                )}
-                onClick={() => toggleSystem(system)}
-              >
-                {systemLabels[system]}
-              </button>
-            ))}
+            {proofFilters.map((filter) => {
+              const isActive =
+                filter.type === "system"
+                  ? systems.includes(filter.value)
+                  : teeVerifiers.includes(filter.value);
+              return (
+                <button
+                  key={`${filter.type}-${filter.value}`}
+                  className={clsx(
+                    "rounded-full border px-4 py-2 text-xs uppercase tracking-[0.2em] transition",
+                    isActive
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-line/70 bg-slate text-white/60"
+                  )}
+                  onClick={() => toggleProofFilter(filter)}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
           </div>
           <input
             type="text"

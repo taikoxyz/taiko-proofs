@@ -60,6 +60,7 @@ export interface ZkShareResponse {
 
 export interface ProofSystemPoint {
   date: string;
+  provenTotal: number;
   tee: number;
   teeSgxGeth: number;
   teeSgxReth: number;

@@ -188,6 +188,7 @@ export class StatsService {
 
       points.push({
         date: key,
+        provenTotal: row?.provenTotal ?? 0,
         tee: row?.teeTotal ?? 0,
         teeSgxGeth: row?.teeSgxGethTotal ?? 0,
         teeSgxReth: row?.teeSgxRethTotal ?? 0,

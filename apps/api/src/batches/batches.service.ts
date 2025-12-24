@@ -60,12 +60,31 @@ export class BatchesService {
 
     const andFilters: Prisma.BatchWhereInput[] = [];
 
+    const proofFilters: Prisma.BatchWhereInput[] = [];
+
     if (query.system?.length) {
-      andFilters.push({
+      proofFilters.push({
         proofSystems: {
           hasSome: query.system
         }
       });
+    }
+
+    if (query.teeVerifier?.length) {
+      proofFilters.push({
+        AND: [
+          { proofSystems: { hasSome: ["TEE"] as ProofSystem[] } },
+          { teeVerifiers: { hasSome: query.teeVerifier } }
+        ]
+      });
+    }
+
+    if (proofFilters.length) {
+      andFilters.push({ OR: proofFilters });
+      // When filtering by proof system or TEE verifier, only show batches that have been proven
+      if (!where.provenAt) {
+        where.provenAt = { not: null };
+      }
     }
 
     if (query.proofType === "zk") {

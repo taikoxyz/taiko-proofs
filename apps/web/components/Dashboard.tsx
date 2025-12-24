@@ -52,11 +52,10 @@ export default function Dashboard() {
             <div>
               <span className="chip">TaikoProofs</span>
               <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight text-white lg:text-5xl">
-                Proof coverage, without the noise.
+                Proof coverage for Taiko Alethia, made simple.
               </h1>
               <p className="mt-3 max-w-2xl text-base text-white/70">
-                Track Taiko batch proving mix, ZK share, and latency across time.
-                Built to be fast, minimal, and easy to scan.
+                Daily stats, latency and batch details.
               </p>
             </div>
             <div className="flex flex-col gap-3">

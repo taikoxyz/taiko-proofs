@@ -58,6 +58,7 @@ describe("StatsService", () => {
     prismaStub.dailyStat.findMany.mockResolvedValue([
       {
         date: new Date("2024-02-01T00:00:00Z"),
+        provenTotal: 6,
         teeTotal: 5,
         teeSgxGethTotal: 3,
         teeSgxRethTotal: 2,
@@ -74,6 +75,7 @@ describe("StatsService", () => {
 
     expect(result.points[0]).toEqual({
       date: "2024-02-01",
+      provenTotal: 6,
       tee: 5,
       teeSgxGeth: 3,
       teeSgxReth: 2,
