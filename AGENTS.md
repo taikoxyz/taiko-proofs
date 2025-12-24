@@ -4,7 +4,8 @@
 - `apps/web`: Next.js 14 UI (App Router in `apps/web/app`, UI pieces in `apps/web/components`, helpers in `apps/web/lib`).
 - `apps/api`: NestJS API and indexer (`apps/api/src`), Jest tests in `apps/api/test`, Prisma schema/migrations in `apps/api/prisma`.
 - `packages/shared`: Shared TypeScript types exported from `packages/shared/src`.
-- `docs`: Operational notes, especially `docs/runbook.md`.
+- `docs`: Operational notes in `docs/runbook.md`; inbox event flow in `docs/event-architecture.md`.
+- `ARCHITECTURE.md`: High-level system overview.
 
 ## Build, Test, and Development Commands
 - `pnpm install`: Install workspace dependencies.

@@ -48,6 +48,11 @@ model Batch {
 
   @@index([provenAt])
   @@index([verifiedAt])
+  @@index([proposedAt])
+  @@index([provenBlock])
+  @@index([verifiedBlock])
+  @@index([proofSystems], type: Gin)
+  @@index([teeVerifiers], type: Gin)
   @@map("batches")
 }
 
@@ -71,6 +76,7 @@ model BatchProof {
   @@unique([batchId, proofTxHash])
   @@index([batchId])
   @@index([provenAt])
+  @@index([provenBlock])
   @@map("batch_proofs")
 }
 
@@ -93,6 +99,12 @@ model DailyStat {
 model IndexingState {
   chainId            Int      @id @map("chain_id")
   lastProcessedBlock BigInt   @map("last_processed_block")
+  lockId             String?  @db.Uuid @map("lock_id")
+  lockExpiresAt      DateTime? @map("lock_expires_at")
+  lastRunStartedAt   DateTime? @map("last_run_started_at")
+  lastRunFinishedAt  DateTime? @map("last_run_finished_at")
+  lastRunStatus      String?  @map("last_run_status")
+  lastRunError       String?  @db.Text @map("last_run_error")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("indexing_state")

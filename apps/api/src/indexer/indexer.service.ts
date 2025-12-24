@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { decodeEventLog, parseAbiItem, Log, PublicClient } from "viem";
 import { PrismaService } from "../prisma/prisma.service";
 import { ChainService } from "../chain/chain.service";
@@ -55,21 +56,24 @@ export class IndexerService {
         ? latestBlock - BigInt(this.config.confirmations)
         : latestBlock;
 
-    const state = await this.prisma.indexingState.findUnique({
-      where: { chainId: this.config.chainId }
-    });
-
     const startBlock = this.config.startBlock ?? Number(safeBlock);
-    const lastProcessed = state ? state.lastProcessedBlock : BigInt(startBlock);
+    const lock = await this.acquireIndexingLock(BigInt(startBlock));
+    if (!lock) {
+      this.logger.warn("Indexing already running; skipping this run.");
+      return { fromBlock: BigInt(startBlock), toBlock: safeBlock, processed: 0 };
+    }
+
+    const { lockId, lastProcessedBlock } = lock;
     const fromBlock =
-      lastProcessed > BigInt(this.config.reorgBuffer)
-        ? lastProcessed - BigInt(this.config.reorgBuffer)
+      lastProcessedBlock > BigInt(this.config.reorgBuffer)
+        ? lastProcessedBlock - BigInt(this.config.reorgBuffer)
         : BigInt(startBlock);
 
     const chunkSize = BigInt(this.config.indexerChunkSize);
 
     if (safeBlock <= fromBlock) {
       this.logger.log("No new blocks to index");
+      await this.releaseIndexingLock(lockId, "success");
       return { fromBlock, toBlock: safeBlock, processed: 0 };
     }
 
@@ -78,52 +82,50 @@ export class IndexerService {
     let rangeIndex = 1n;
     const runStartedAt = Date.now();
 
-    this.logger.log(
-      `Indexing ${totalRanges.toString()} range(s) from ${fromBlock} to ${safeBlock} (chunk ${chunkSize}).`
-    );
-
-    for (let cursor = fromBlock; cursor <= safeBlock; cursor += chunkSize) {
-      const toBlock = cursor + chunkSize - 1n > safeBlock ? safeBlock : cursor + chunkSize - 1n;
-      const rangeStartedAt = Date.now();
+    try {
       this.logger.log(
-        `Processing range ${rangeIndex.toString()}/${totalRanges.toString()}: ${cursor} -> ${toBlock}.`
-      );
-      const processedInRange = await this.processRange(cursor, toBlock);
-      processed += processedInRange;
-
-      const rangeDurationSeconds = ((Date.now() - rangeStartedAt) / 1000).toFixed(1);
-      this.logger.log(
-        `Processed range ${cursor} -> ${toBlock}: ${processedInRange} event(s) in ${rangeDurationSeconds}s.`
+        `Indexing ${totalRanges.toString()} range(s) from ${fromBlock} to ${safeBlock} (chunk ${chunkSize}).`
       );
 
-      await this.prisma.indexingState.upsert({
-        where: { chainId: this.config.chainId },
-        create: {
-          chainId: this.config.chainId,
-          lastProcessedBlock: toBlock
-        },
-        update: {
-          lastProcessedBlock: toBlock
-        }
-      });
+      for (let cursor = fromBlock; cursor <= safeBlock; cursor += chunkSize) {
+        const toBlock = cursor + chunkSize - 1n > safeBlock ? safeBlock : cursor + chunkSize - 1n;
+        const rangeStartedAt = Date.now();
+        this.logger.log(
+          `Processing range ${rangeIndex.toString()}/${totalRanges.toString()}: ${cursor} -> ${toBlock}.`
+        );
+        const processedInRange = await this.processRange(cursor, toBlock);
+        processed += processedInRange;
 
-      rangeIndex += 1n;
+        const rangeDurationSeconds = ((Date.now() - rangeStartedAt) / 1000).toFixed(1);
+        this.logger.log(
+          `Processed range ${cursor} -> ${toBlock}: ${processedInRange} event(s) in ${rangeDurationSeconds}s.`
+        );
+
+        await this.checkpointIndexingProgress(lockId, toBlock);
+
+        rangeIndex += 1n;
+      }
+
+      const statsStartedAt = Date.now();
+      await this.checkpointIndexingProgress(lockId, safeBlock);
+      await this.stats.refreshDailyStats(this.config.statsLookbackDays);
+      this.logger.log(
+        `Stats refresh (${this.config.statsLookbackDays} days) in ${this.formatDuration(
+          statsStartedAt
+        )}.`
+      );
+
+      const runDurationSeconds = ((Date.now() - runStartedAt) / 1000).toFixed(1);
+      this.logger.log(
+        `Indexing run complete: processed ${processed} event(s) in ${runDurationSeconds}s.`
+      );
+
+      await this.releaseIndexingLock(lockId, "success");
+      return { fromBlock, toBlock: safeBlock, processed };
+    } catch (error) {
+      await this.releaseIndexingLock(lockId, "failed", error);
+      throw error;
     }
-
-    const statsStartedAt = Date.now();
-    await this.stats.refreshDailyStats(this.config.statsLookbackDays);
-    this.logger.log(
-      `Stats refresh (${this.config.statsLookbackDays} days) in ${this.formatDuration(
-        statsStartedAt
-      )}.`
-    );
-
-    const runDurationSeconds = ((Date.now() - runStartedAt) / 1000).toFixed(1);
-    this.logger.log(
-      `Indexing run complete: processed ${processed} event(s) in ${runDurationSeconds}s.`
-    );
-
-    return { fromBlock, toBlock: safeBlock, processed };
   }
 
   private async processRange(fromBlock: bigint, toBlock: bigint): Promise<number> {
@@ -902,5 +904,89 @@ export class IndexerService {
 
   private async sleep(ms: number) {
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async acquireIndexingLock(
+    startBlock: bigint
+  ): Promise<{ lockId: string; lastProcessedBlock: bigint } | null> {
+    const lockId = randomUUID();
+    const ttlSeconds = this.config.indexerLockTtlSeconds;
+    const [row] = await this.prisma.$queryRaw<{ last_processed_block: bigint }[]>`
+      INSERT INTO indexing_state (
+        chain_id,
+        last_processed_block,
+        lock_id,
+        lock_expires_at,
+        last_run_started_at,
+        last_run_status,
+        last_run_error
+      )
+      VALUES (
+        ${this.config.chainId},
+        ${startBlock},
+        ${lockId}::uuid,
+        NOW() + (${ttlSeconds} * INTERVAL '1 second'),
+        NOW(),
+        'running',
+        NULL
+      )
+      ON CONFLICT (chain_id) DO UPDATE
+      SET
+        lock_id = EXCLUDED.lock_id,
+        lock_expires_at = EXCLUDED.lock_expires_at,
+        last_run_started_at = EXCLUDED.last_run_started_at,
+        last_run_status = EXCLUDED.last_run_status,
+        last_run_error = NULL
+      WHERE indexing_state.lock_expires_at IS NULL OR indexing_state.lock_expires_at < NOW()
+      RETURNING last_processed_block
+    `;
+
+    if (!row) {
+      return null;
+    }
+
+    return { lockId, lastProcessedBlock: row.last_processed_block };
+  }
+
+  private async checkpointIndexingProgress(lockId: string, lastProcessedBlock: bigint) {
+    const lockExpiresAt = new Date(
+      Date.now() + this.config.indexerLockTtlSeconds * 1000
+    );
+    const result = await this.prisma.indexingState.updateMany({
+      where: { chainId: this.config.chainId, lockId },
+      data: {
+        lastProcessedBlock,
+        lockExpiresAt
+      }
+    });
+
+    if (!result.count) {
+      throw new Error("Indexer lock lost or expired");
+    }
+  }
+
+  private async releaseIndexingLock(
+    lockId: string,
+    status: "success" | "failed",
+    error?: unknown
+  ) {
+    const errorMessage = status === "failed" ? this.formatError(error) : null;
+    await this.prisma.indexingState.updateMany({
+      where: { chainId: this.config.chainId, lockId },
+      data: {
+        lockId: null,
+        lockExpiresAt: null,
+        lastRunFinishedAt: new Date(),
+        lastRunStatus: status,
+        lastRunError: errorMessage
+      }
+    });
+  }
+
+  private formatError(error: unknown): string {
+    if (error instanceof Error) {
+      return (error.message || error.name).slice(0, 2000);
+    }
+    return String(error ?? "Unknown error").slice(0, 2000);
   }
 }
