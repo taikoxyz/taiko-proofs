@@ -12,14 +12,14 @@ export class StatsController {
     const { startDate, endDate, endIsDateOnly } = parseDateRange(
       query.start,
       query.end,
-      30
+      7
     );
     return this.stats.getZkShare(startDate, endDate, endIsDateOnly);
   }
 
   @Get("proof-systems")
   async getProofSystems(@Query() query: RangeQueryDto) {
-    const { startDate, endDate } = parseDateRange(query.start, query.end, 30);
+    const { startDate, endDate } = parseDateRange(query.start, query.end, 7);
     return this.stats.getProofSystemUsage(startDate, endDate);
   }
 
@@ -28,7 +28,7 @@ export class StatsController {
     const { startDate, endDate, endIsDateOnly } = parseDateRange(
       query.start,
       query.end,
-      30
+      7
     );
     const type = query.type ?? "proving";
     const verifiedOnly = query.verifiedOnly ? query.verifiedOnly === "true" : true;

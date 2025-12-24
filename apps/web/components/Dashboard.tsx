@@ -21,9 +21,9 @@ export default function Dashboard() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab: TabId = searchParams.get("tab") === "batches" ? "batches" : "stats";
-  const [preset, setPreset] = useState<RangePreset>("30");
+  const [preset, setPreset] = useState<RangePreset>("7");
   const [customStart, setCustomStart] = useState(
-    formatUtcDateTime(subDays(new Date(), 30))
+    formatUtcDateTime(subDays(new Date(), 7))
   );
   const [customEnd, setCustomEnd] = useState(formatUtcDateTime(new Date()));
 

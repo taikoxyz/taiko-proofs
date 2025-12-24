@@ -11,7 +11,7 @@ export function addDays(date: Date, days: number) {
 export function parseDateRange(
   start?: string,
   end?: string,
-  defaultDays = 30
+  defaultDays = 7
 ): { startDate: Date; endDate: Date; endIsDateOnly: boolean } {
   const endIsDateOnly = end ? !end.includes("T") : true;
   const startIsDateOnly = start ? !start.includes("T") : endIsDateOnly;

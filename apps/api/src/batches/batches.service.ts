@@ -28,7 +28,7 @@ export class BatchesService {
     const { startDate, endDate, endIsDateOnly } = parseDateRange(
       query.start,
       query.end,
-      30
+      7
     );
     const dateField = query.dateField ?? "proposedAt";
     const endBoundary = endIsDateOnly ? addDays(endDate, 1) : endDate;
