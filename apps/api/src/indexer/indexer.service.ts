@@ -30,6 +30,12 @@ type GetLogsEvent = NonNullable<
     : never
 >;
 
+type IndexingResult = {
+  fromBlock: string;
+  toBlock: string;
+  processed: number;
+};
+
 @Injectable()
 export class IndexerService {
   private readonly logger = new Logger(IndexerService.name);
@@ -48,7 +54,7 @@ export class IndexerService {
     }
   }
 
-  async runIndexing(): Promise<{ fromBlock: bigint; toBlock: bigint; processed: number }> {
+  async runIndexing(): Promise<IndexingResult> {
     const client = this.chain.getClient();
     const latestBlock = await client.getBlockNumber();
     const safeBlock =
@@ -60,7 +66,11 @@ export class IndexerService {
     const lock = await this.acquireIndexingLock(BigInt(startBlock));
     if (!lock) {
       this.logger.warn("Indexing already running; skipping this run.");
-      return { fromBlock: BigInt(startBlock), toBlock: safeBlock, processed: 0 };
+      return {
+        fromBlock: BigInt(startBlock).toString(),
+        toBlock: safeBlock.toString(),
+        processed: 0
+      };
     }
 
     const { lockId, lastProcessedBlock } = lock;
@@ -74,7 +84,11 @@ export class IndexerService {
     if (safeBlock <= fromBlock) {
       this.logger.log("No new blocks to index");
       await this.releaseIndexingLock(lockId, "success");
-      return { fromBlock, toBlock: safeBlock, processed: 0 };
+      return {
+        fromBlock: fromBlock.toString(),
+        toBlock: safeBlock.toString(),
+        processed: 0
+      };
     }
 
     let processed = 0;
@@ -121,7 +135,11 @@ export class IndexerService {
       );
 
       await this.releaseIndexingLock(lockId, "success");
-      return { fromBlock, toBlock: safeBlock, processed };
+      return {
+        fromBlock: fromBlock.toString(),
+        toBlock: safeBlock.toString(),
+        processed
+      };
     } catch (error) {
       await this.releaseIndexingLock(lockId, "failed", error);
       throw error;
