@@ -165,6 +165,60 @@ function ProofBadgeGroup({
   );
 }
 
+type BatchItem = BatchesResponse["items"][number];
+
+function BatchCard({
+  batch,
+  onSelect
+}: {
+  batch: BatchItem;
+  onSelect: (batchId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(batch.batchId)}
+      aria-label={`View batch ${batch.batchId}`}
+      className="w-full rounded-2xl border border-line/60 bg-slate/60 p-4 text-left transition hover:border-line/80 hover:bg-slate/80"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium text-white">
+          Batch #{batch.batchId}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={batch.status} contested={batch.isContested} />
+          {batch.isLegacy && <LegacyBadge />}
+        </div>
+      </div>
+      <div className="mt-3">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+          Proof Systems
+        </p>
+        <div className="mt-2">
+          <ProofBadgeGroup
+            proofSystems={batch.proofSystems}
+            teeVerifiers={batch.teeVerifiers}
+          />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 text-xs text-white/70">
+        <div className="flex items-center justify-between">
+          <span className="text-white/50">Proposed</span>
+          <span>{formatDateTime(batch.proposedAt)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-white/50">Proven</span>
+          <span>{formatDateTime(batch.provenAt)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-white/50">Verified</span>
+          <span>{formatDateTime(batch.verifiedAt)}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function BatchesView({ range }: BatchesViewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -353,8 +407,8 @@ export default function BatchesView({ range }: BatchesViewProps) {
           </div>
         )}
 
-        <div className="mt-5 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap gap-2">
             {proofFilters.map((filter) => {
               const isActive =
                 filter.type === "system"
@@ -386,13 +440,23 @@ export default function BatchesView({ range }: BatchesViewProps) {
               }
             }}
             placeholder="Search batch id"
-            className="ml-auto min-w-[180px] rounded-full border border-line/70 bg-slate px-4 py-2 text-sm text-white/80"
+            className="w-full rounded-full border border-line/70 bg-slate px-4 py-2 text-sm text-white/80 sm:ml-auto sm:min-w-[180px] sm:w-auto"
           />
         </div>
       </div>
 
       <div className="card overflow-hidden">
-        <table className="w-full text-left text-sm">
+        <div className="space-y-3 lg:hidden">
+          {data?.items?.map((batch) => (
+            <BatchCard
+              key={batch.batchId}
+              batch={batch}
+              onSelect={setSelectedBatch}
+            />
+          ))}
+        </div>
+
+        <table className="hidden w-full text-left text-sm lg:table">
           <thead className="text-white/60">
             <tr>
               <th className="px-4 py-3">Batch</th>
@@ -462,20 +526,20 @@ export default function BatchesView({ range }: BatchesViewProps) {
           <div className="px-4 py-10 text-center text-white/50">No batches found.</div>
         )}
 
-        <div className="flex items-center justify-between border-t border-line/60 px-4 py-4 text-sm text-white/70">
+        <div className="flex flex-col gap-3 border-t border-line/60 px-4 py-4 text-sm text-white/70 sm:flex-row sm:items-center sm:justify-between">
           <span>
             Page {currentPage} of {totalPages}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <button
-              className="rounded-full border border-line/70 px-3 py-1 disabled:opacity-40"
+              className="flex-1 rounded-full border border-line/70 px-3 py-1 disabled:opacity-40 sm:flex-none"
               disabled={!data || currentPage === 1}
               onClick={() => setPageInUrl(currentPage - 1)}
             >
               Prev
             </button>
             <button
-              className="rounded-full border border-line/70 px-3 py-1 disabled:opacity-40"
+              className="flex-1 rounded-full border border-line/70 px-3 py-1 disabled:opacity-40 sm:flex-none"
               disabled={!data || currentPage >= totalPages}
               onClick={() => setPageInUrl(currentPage + 1)}
             >
@@ -537,8 +601,8 @@ function BatchDrawer({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60">
-      <div className="h-full w-full max-w-lg bg-ink p-6 shadow-xl">
-        <div className="flex items-center justify-between">
+      <div className="h-full w-full max-w-lg overflow-y-auto bg-ink p-4 shadow-xl sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-display text-2xl text-white">Batch #{batch.batchId}</h3>
           <button
             className="rounded-full border border-line/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/60"

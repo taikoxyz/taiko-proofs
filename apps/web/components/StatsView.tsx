@@ -35,7 +35,7 @@ interface StatsViewProps {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div className="flex flex-col gap-2">
-      <h2 className="font-display text-2xl text-white">{title}</h2>
+      <h2 className="font-display text-xl text-white sm:text-2xl">{title}</h2>
       <p className="text-sm text-white/60">{description}</p>
     </div>
   );
@@ -244,7 +244,7 @@ export default function StatsView({ range }: StatsViewProps) {
             title="ZK Proven Share"
             description="Daily percent of batches proven with SP1 RETH or RISC0 RETH."
           />
-          <div className="mt-6 h-64">
+          <div className="mt-6 h-56 sm:h-64">
             {zkShare ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={zkShare.points} margin={{ left: 0, right: 16 }}>
@@ -345,7 +345,7 @@ export default function StatsView({ range }: StatsViewProps) {
           title="Proof System Usage"
           description="Each batch contributes to every proof system used. TEE usage is split by verifier type."
         />
-        <div className="mt-6 h-72">
+        <div className="mt-6 h-64 sm:h-72">
           {proofSystemData ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -438,7 +438,7 @@ export default function StatsView({ range }: StatsViewProps) {
             title="Latency Trend"
             description="Daily average proving latency."
           />
-          <div className="mt-6 h-64">
+          <div className="mt-6 h-56 sm:h-64">
             {provingLatency ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={provingLatency.series} margin={{ left: 0, right: 16 }}>

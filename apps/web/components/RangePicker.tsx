@@ -49,13 +49,13 @@ export default function RangePicker({
   onCustomEndChange
 }: RangePickerProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-2 rounded-full border border-line/70 bg-slate px-1 py-1">
+    <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+      <div className="flex w-full flex-wrap items-center gap-2 rounded-full border border-line/70 bg-slate px-1 py-1 sm:w-auto">
         {presets.map((item) => (
           <button
             key={item.value}
             className={clsx(
-              "rounded-full px-4 py-1 text-xs uppercase tracking-[0.2em] transition",
+              "rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.2em] transition sm:px-4 sm:text-xs",
               preset === item.value
                 ? "bg-accent text-ink"
                 : "text-white/60 hover:text-white"
@@ -68,14 +68,14 @@ export default function RangePicker({
       </div>
 
       {preset === "custom" && (
-        <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
-          <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-3 text-xs text-white/70 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               type="datetime-local"
               value={customStart}
               step={60}
               onChange={(event) => onCustomStartChange(event.target.value)}
-              className="rounded-md border border-line/70 bg-slate px-3 py-1"
+              className="w-full rounded-md border border-line/70 bg-slate px-3 py-1 sm:w-auto"
             />
             <span>to</span>
             <input
@@ -83,10 +83,10 @@ export default function RangePicker({
               value={customEnd}
               step={60}
               onChange={(event) => onCustomEndChange(event.target.value)}
-              className="rounded-md border border-line/70 bg-slate px-3 py-1"
+              className="w-full rounded-md border border-line/70 bg-slate px-3 py-1 sm:w-auto"
             />
           </div>
-          <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 sm:ml-auto">
             UTC
           </span>
         </div>

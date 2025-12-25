@@ -51,10 +51,10 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-6">
             <div>
               <span className="chip">TaikoProofs</span>
-              <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight text-white lg:text-5xl">
+              <h1 className="mt-4 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
                 Proof coverage for Taiko Alethia, made simple.
               </h1>
-              <p className="mt-3 max-w-2xl text-base text-white/70">
+              <p className="mt-3 max-w-2xl text-sm text-white/70 sm:text-base">
                 Daily stats, latency and batch details.
               </p>
             </div>
@@ -71,12 +71,12 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-full border border-line/70 bg-slate px-2 py-2">
+          <div className="flex w-full flex-wrap items-center gap-3 rounded-full border border-line/70 bg-slate px-2 py-2 sm:w-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 className={clsx(
-                  "rounded-full px-6 py-2 text-xs uppercase tracking-[0.25em] transition",
+                  "flex-1 rounded-full px-4 py-2 text-[11px] uppercase tracking-[0.2em] transition sm:flex-none sm:px-6 sm:text-xs sm:tracking-[0.25em]",
                   activeTab === tab.id
                     ? "bg-accent text-ink"
                     : "text-white/60 hover:text-white"
