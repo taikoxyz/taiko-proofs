@@ -93,6 +93,10 @@ export interface LatencyResponse {
   series: LatencySeriesPoint[];
 }
 
+export interface StatsMetadataResponse {
+  dataStart: string | null;
+}
+
 export interface BatchesResponse {
   range: RangeResponse;
   page: number;

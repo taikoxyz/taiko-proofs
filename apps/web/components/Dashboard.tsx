@@ -3,11 +3,15 @@
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { subDays } from "date-fns";
+import useSWR from "swr";
 import RangePicker, { RangePreset, resolveRange } from "./RangePicker";
 import StatsView from "./StatsView";
 import BatchesView from "./BatchesView";
 import clsx from "clsx";
+import { StatsMetadataResponse } from "@taikoproofs/shared";
+import { buildApiUrl, fetcher } from "../lib/api";
 import { formatUtcDateTime } from "../lib/date";
+import { formatDate } from "../lib/format";
 
 const tabs = [
   { id: "stats", label: "Stats" },
@@ -26,6 +30,13 @@ export default function Dashboard() {
     formatUtcDateTime(subDays(new Date(), 7))
   );
   const [customEnd, setCustomEnd] = useState(formatUtcDateTime(new Date()));
+  const { data: statsMetadata } = useSWR<StatsMetadataResponse>(
+    buildApiUrl("/stats/metadata"),
+    fetcher
+  );
+  const dataStartLabel = statsMetadata?.dataStart
+    ? formatDate(statsMetadata.dataStart)
+    : null;
 
   const range = useMemo(
     () => resolveRange(preset, customStart, customEnd),
@@ -59,7 +70,14 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-col gap-3">
-              <span className="label">Range</span>
+              <div className="flex flex-col gap-1">
+                <span className="label">Range</span>
+                {dataStartLabel && (
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    Data available since {dataStartLabel}
+                  </span>
+                )}
+              </div>
               <RangePicker
                 preset={preset}
                 customStart={customStart}

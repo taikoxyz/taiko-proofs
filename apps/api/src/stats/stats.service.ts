@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   LatencyResponse,
   ProofSystemResponse,
+  StatsMetadataResponse,
   ZkShareResponse
 } from "@taikoproofs/shared";
 import { addDays, startOfUtcDay } from "../common/date";
@@ -15,6 +16,17 @@ function dateKey(date: Date) {
 @Injectable()
 export class StatsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMetadata(): Promise<StatsMetadataResponse> {
+    const batchMin = await this.prisma.batch.aggregate({
+      _min: { proposedAt: true }
+    });
+    const earliest = batchMin._min.proposedAt ?? null;
+
+    return {
+      dataStart: earliest ? dateKey(earliest) : null
+    };
+  }
 
   async refreshDailyStats(lookbackDays: number) {
     const end = startOfUtcDay(new Date());

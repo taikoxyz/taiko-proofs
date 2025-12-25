@@ -7,6 +7,11 @@ import { parseDateRange } from "../common/date";
 export class StatsController {
   constructor(private readonly stats: StatsService) {}
 
+  @Get("metadata")
+  async getMetadata() {
+    return this.stats.getMetadata();
+  }
+
   @Get("zk")
   async getZkShare(@Query() query: RangeQueryDto) {
     const { startDate, endDate, endIsDateOnly } = parseDateRange(
