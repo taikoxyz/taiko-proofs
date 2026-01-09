@@ -13,6 +13,7 @@ const EnvSchema = z.object({
   INDEXER_CHUNK_SIZE: z.coerce.number().default(2000),
   INDEXER_LOG_RANGE_LIMIT: z.coerce.number().optional(),
   INDEXER_LOCK_TTL_SECONDS: z.coerce.number().default(600),
+  INDEXER_MAX_RUNTIME_SECONDS: z.coerce.number().optional(),
   L1_EXPLORER_BASE_URL: z.string().optional(),
   VERIFIER_CONFIG_PATH: z.string().optional()
 });
@@ -69,6 +70,10 @@ export class AppConfigService {
 
   get indexerLockTtlSeconds(): number {
     return this.config.INDEXER_LOCK_TTL_SECONDS;
+  }
+
+  get indexerMaxRuntimeSeconds(): number | undefined {
+    return this.config.INDEXER_MAX_RUNTIME_SECONDS;
   }
 
   get explorerBaseUrl(): string | undefined {

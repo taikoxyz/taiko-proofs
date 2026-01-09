@@ -1,6 +1,7 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "routes": [
-    { "src": "/(.*)", "dest": "/api/index.ts" }
+    { "src": "/(.*)", "dest": "api/index.ts" }
   ],
   "crons": [
     { "path": "/admin/index", "schedule": "*/10 * * * *" }

@@ -18,18 +18,21 @@ export class StatsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getMetadata(): Promise<StatsMetadataResponse> {
-    const batchMin = await this.prisma.batch.aggregate({
-      _min: { proposedAt: true }
+    const aggregate = await this.prisma.batch.aggregate({
+      _min: { proposedAt: true },
+      _max: { proposedAt: true }
     });
-    const earliest = batchMin._min.proposedAt ?? null;
+    const earliest = aggregate._min.proposedAt ?? null;
+    const latest = aggregate._max.proposedAt ?? null;
 
     return {
-      dataStart: earliest ? dateKey(earliest) : null
+      dataStart: earliest ? dateKey(earliest) : null,
+      dataEnd: latest ? dateKey(latest) : null
     };
   }
 
   async refreshDailyStats(lookbackDays: number) {
-    const end = startOfUtcDay(new Date());
+    const end = await this.resolveStatsEndDate();
     const start = addDays(end, -lookbackDays);
 
     const provenRows = await this.prisma.$queryRaw<
@@ -113,6 +116,25 @@ export class StatsService {
         }
       });
     }
+  }
+
+  private async resolveStatsEndDate(): Promise<Date> {
+    const aggregate = await this.prisma.batch.aggregate({
+      _max: { proposedAt: true, provenAt: true, verifiedAt: true }
+    });
+
+    const candidates = [aggregate._max.verifiedAt, aggregate._max.provenAt, aggregate._max.proposedAt]
+      .filter((value): value is Date => value instanceof Date);
+
+    if (!candidates.length) {
+      return startOfUtcDay(new Date());
+    }
+
+    const latest = candidates.reduce((best, current) =>
+      current.getTime() > best.getTime() ? current : best
+    );
+
+    return startOfUtcDay(latest);
   }
 
   async getZkShare(

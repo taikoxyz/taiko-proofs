@@ -1,0 +1,39 @@
+name: Vercel Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-web-production:
+    uses: ./.github/workflows/repo--vercel-deploy.yml
+    with:
+      environment: "production"
+      flags: "--prod"
+    secrets:
+      vercel_project_id: ${{ secrets.VERCEL_PROJECT_ID_TAIKOPROOFS }}
+      vercel_org_id: ${{ secrets.VERCEL_ORG_ID }}
+      vercel_token: ${{ secrets.VERCEL_TOKEN }}
+
+  deploy-api-production:
+    uses: ./.github/workflows/repo--vercel-deploy.yml
+    with:
+      environment: "production"
+      flags: "--prod"
+    secrets:
+      vercel_project_id: ${{ secrets.VERCEL_PROJECT_ID_TAIKOPROOFS_API }}
+      vercel_org_id: ${{ secrets.VERCEL_ORG_ID }}
+      vercel_token: ${{ secrets.VERCEL_TOKEN }}
+

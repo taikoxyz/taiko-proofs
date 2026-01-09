@@ -37,10 +37,19 @@ export default function Dashboard() {
   const dataStartLabel = statsMetadata?.dataStart
     ? formatDate(statsMetadata.dataStart)
     : null;
+  const dataEndLabel = statsMetadata?.dataEnd ? formatDate(statsMetadata.dataEnd) : null;
+
+  const anchorDate = useMemo(() => {
+    if (!statsMetadata?.dataEnd) {
+      return undefined;
+    }
+    const parsed = new Date(`${statsMetadata.dataEnd}T00:00:00Z`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [statsMetadata?.dataEnd]);
 
   const range = useMemo(
-    () => resolveRange(preset, customStart, customEnd),
-    [preset, customStart, customEnd]
+    () => resolveRange(preset, customStart, customEnd, anchorDate),
+    [preset, customStart, customEnd, anchorDate]
   );
 
   const setActiveTab = (nextTab: TabId) => {
@@ -72,6 +81,11 @@ export default function Dashboard() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <span className="label">Range</span>
+                {dataEndLabel && (
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                    Indexed through {dataEndLabel}
+                  </span>
+                )}
                 {dataStartLabel && (
                   <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
                     Data available since {dataStartLabel}

@@ -95,6 +95,7 @@ export interface LatencyResponse {
 
 export interface StatsMetadataResponse {
   dataStart: string | null;
+  dataEnd: string | null;
 }
 
 export interface BatchesResponse {
