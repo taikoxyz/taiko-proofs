@@ -52,6 +52,9 @@ export function formatDurationSeconds(seconds?: number | string | null) {
   return `${hours}h ${leftover}m`;
 }
 
-export function formatPercent(value: number) {
+export function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return "—";
+  }
   return `${value.toFixed(1)}%`;
 }

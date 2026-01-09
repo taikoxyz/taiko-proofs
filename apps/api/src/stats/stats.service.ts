@@ -141,7 +141,7 @@ export class StatsService {
       const row = statsMap.get(key);
       const provenTotal = row?.provenTotal ?? 0;
       const zkProvenTotal = row?.zkProvenTotal ?? 0;
-      const zkPercent = provenTotal ? (zkProvenTotal / provenTotal) * 100 : 0;
+      const zkPercent = provenTotal ? (zkProvenTotal / provenTotal) * 100 : null;
 
       points.push({
         date: key,

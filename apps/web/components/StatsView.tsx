@@ -261,17 +261,18 @@ export default function StatsView({ range }: StatsViewProps) {
                       border: "1px solid #1f2a30",
                       borderRadius: 12
                     }}
-                    formatter={(value: number, name) => {
+                    formatter={(value, name) => {
+                      const numValue = typeof value === "number" ? value : null;
                       if (name === "zkPercent") {
-                        return [formatPercent(value), "ZK %"];
+                        return [formatPercent(numValue), "ZK %"];
                       }
                       if (name === "provenTotal") {
-                        return [value, "Total Proven"];
+                        return [value ?? "—", "Total Proven"];
                       }
                       if (name === "zkProvenTotal") {
-                        return [value, "ZK Proven"];
+                        return [value ?? "—", "ZK Proven"];
                       }
-                      return [value, name];
+                      return [value ?? "—", name];
                     }}
                     labelStyle={{ color: "#9fb0ba" }}
                   />
