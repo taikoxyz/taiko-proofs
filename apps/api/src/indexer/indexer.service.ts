@@ -1,6 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "crypto";
-import { decodeEventLog, parseAbiItem, Log, PublicClient } from "viem";
+import {
+  decodeEventLog,
+  parseAbiItem,
+  Log,
+  PublicClient,
+  HttpRequestError,
+  TimeoutError
+} from "viem";
 import { PrismaService } from "../prisma/prisma.service";
 import { ChainService } from "../chain/chain.service";
 import { AppConfigService } from "../config/app-config.service";
@@ -33,7 +40,9 @@ type GetLogsEvent = NonNullable<
 type IndexingResult = {
   fromBlock: string;
   toBlock: string;
+  targetBlock: string;
   processed: number;
+  status: "skipped" | "partial" | "success";
 };
 
 @Injectable()
@@ -68,8 +77,10 @@ export class IndexerService {
       this.logger.warn("Indexing already running; skipping this run.");
       return {
         fromBlock: BigInt(startBlock).toString(),
-        toBlock: safeBlock.toString(),
-        processed: 0
+        toBlock: BigInt(startBlock).toString(),
+        targetBlock: safeBlock.toString(),
+        processed: 0,
+        status: "skipped"
       };
     }
 
@@ -87,7 +98,9 @@ export class IndexerService {
       return {
         fromBlock: fromBlock.toString(),
         toBlock: safeBlock.toString(),
-        processed: 0
+        targetBlock: safeBlock.toString(),
+        processed: 0,
+        status: "success"
       };
     }
 
@@ -95,6 +108,12 @@ export class IndexerService {
     const totalRanges = (safeBlock - fromBlock) / chunkSize + 1n;
     let rangeIndex = 1n;
     const runStartedAt = Date.now();
+    const maxRuntimeSeconds = this.config.indexerMaxRuntimeSeconds;
+    const deadlineMs =
+      typeof maxRuntimeSeconds === "number" && maxRuntimeSeconds > 0
+        ? runStartedAt + maxRuntimeSeconds * 1000
+        : null;
+    let lastCheckpointBlock = lastProcessedBlock;
 
     try {
       this.logger.log(
@@ -102,6 +121,13 @@ export class IndexerService {
       );
 
       for (let cursor = fromBlock; cursor <= safeBlock; cursor += chunkSize) {
+        if (deadlineMs && Date.now() >= deadlineMs) {
+          this.logger.warn(
+            `Indexer max runtime (${maxRuntimeSeconds}s) reached; stopping early at ${lastCheckpointBlock}.`
+          );
+          break;
+        }
+
         const toBlock = cursor + chunkSize - 1n > safeBlock ? safeBlock : cursor + chunkSize - 1n;
         const rangeStartedAt = Date.now();
         this.logger.log(
@@ -116,12 +142,12 @@ export class IndexerService {
         );
 
         await this.checkpointIndexingProgress(lockId, toBlock);
+        lastCheckpointBlock = toBlock;
 
         rangeIndex += 1n;
       }
 
       const statsStartedAt = Date.now();
-      await this.checkpointIndexingProgress(lockId, safeBlock);
       await this.stats.refreshDailyStats(this.config.statsLookbackDays);
       this.logger.log(
         `Stats refresh (${this.config.statsLookbackDays} days) in ${this.formatDuration(
@@ -130,15 +156,19 @@ export class IndexerService {
       );
 
       const runDurationSeconds = ((Date.now() - runStartedAt) / 1000).toFixed(1);
+      const caughtUp = lastCheckpointBlock >= safeBlock;
+      const status = caughtUp ? "success" : "partial";
       this.logger.log(
-        `Indexing run complete: processed ${processed} event(s) in ${runDurationSeconds}s.`
+        `Indexing run ${status}: processed ${processed} event(s) in ${runDurationSeconds}s.`
       );
 
-      await this.releaseIndexingLock(lockId, "success");
+      await this.releaseIndexingLock(lockId, status);
       return {
         fromBlock: fromBlock.toString(),
-        toBlock: safeBlock.toString(),
-        processed
+        toBlock: lastCheckpointBlock.toString(),
+        targetBlock: safeBlock.toString(),
+        processed,
+        status
       };
     } catch (error) {
       await this.releaseIndexingLock(lockId, "failed", error);
@@ -805,6 +835,38 @@ export class IndexerService {
         });
         results.push(...logs);
       } catch (error) {
+        if (this.isHttpRequestError(error)) {
+          if (range.from < range.to) {
+            const mid = (range.from + range.to) / 2n;
+            queue.unshift({ from: mid + 1n, to: range.to, attempts: range.attempts });
+            queue.unshift({ from: range.from, to: mid, attempts: range.attempts });
+            continue;
+          }
+
+          if (range.attempts < 6) {
+            const delayMs = Math.min(1000 * 2 ** range.attempts, 15000);
+            await this.sleep(delayMs);
+            queue.unshift({ ...range, attempts: range.attempts + 1 });
+            continue;
+          }
+        }
+
+        if (this.isTimeoutError(error)) {
+          if (range.from < range.to) {
+            const mid = (range.from + range.to) / 2n;
+            queue.unshift({ from: mid + 1n, to: range.to, attempts: range.attempts });
+            queue.unshift({ from: range.from, to: mid, attempts: range.attempts });
+            continue;
+          }
+
+          if (range.attempts < 6) {
+            const delayMs = Math.min(1000 * 2 ** range.attempts, 15000);
+            await this.sleep(delayMs);
+            queue.unshift({ ...range, attempts: range.attempts + 1 });
+            continue;
+          }
+        }
+
         if (this.isLogRangeError(error) && range.from < range.to) {
           const limit = this.extractLogRangeLimit(error);
           if (limit && limit > 0n) {
@@ -858,6 +920,37 @@ export class IndexerService {
     const shortMessage = (error as { shortMessage?: string }).shortMessage;
     const text = [details, message, shortMessage].filter(Boolean).join(" ").toLowerCase();
     return text.includes("eth_getlogs") && text.includes("block range");
+  }
+
+  private isHttpRequestError(error: unknown): boolean {
+    if (error instanceof HttpRequestError) {
+      return true;
+    }
+
+    const details = (error as { details?: string }).details;
+    const message = (error as { message?: string }).message;
+    const shortMessage = (error as { shortMessage?: string }).shortMessage;
+    const text = [details, message, shortMessage].filter(Boolean).join(" ").toLowerCase();
+    return (
+      text.includes("http request failed") ||
+      text.includes("fetch failed") ||
+      text.includes("econnreset") ||
+      text.includes("econnrefused") ||
+      text.includes("ehostunreach") ||
+      text.includes("enotfound")
+    );
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    if (error instanceof TimeoutError) {
+      return true;
+    }
+
+    const details = (error as { details?: string }).details;
+    const message = (error as { message?: string }).message;
+    const shortMessage = (error as { shortMessage?: string }).shortMessage;
+    const text = [details, message, shortMessage].filter(Boolean).join(" ").toLowerCase();
+    return text.includes("timed out") || text.includes("timeout");
   }
 
   private extractLogRangeLimit(error: unknown): bigint | null {
@@ -985,7 +1078,7 @@ export class IndexerService {
 
   private async releaseIndexingLock(
     lockId: string,
-    status: "success" | "failed",
+    status: "success" | "partial" | "failed",
     error?: unknown
   ) {
     const errorMessage = status === "failed" ? this.formatError(error) : null;

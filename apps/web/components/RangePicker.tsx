@@ -23,9 +23,14 @@ const presets: { label: string; value: RangePreset }[] = [
   { label: "Custom", value: "custom" }
 ];
 
-export function resolveRange(preset: RangePreset, customStart: string, customEnd: string) {
-  const now = new Date();
-  const end = formatUtcDate(now);
+export function resolveRange(
+  preset: RangePreset,
+  customStart: string,
+  customEnd: string,
+  anchorDate?: Date
+) {
+  const anchor = anchorDate ?? new Date();
+  const end = formatUtcDate(anchor);
   if (preset === "custom") {
     return {
       start: customStart ? `${customStart}Z` : "",
@@ -35,7 +40,7 @@ export function resolveRange(preset: RangePreset, customStart: string, customEnd
 
   const days = Number(preset);
   return {
-    start: formatUtcDate(subDays(now, days)),
+    start: formatUtcDate(subDays(anchor, days)),
     end
   };
 }
