@@ -46,7 +46,7 @@ export interface ZkSharePoint {
   date: string;
   provenTotal: number;
   zkProvenTotal: number;
-  zkPercent: number;
+  zkPercent: number | null;
 }
 
 export interface ZkShareResponse {

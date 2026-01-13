@@ -40,7 +40,7 @@ describe("StatsService", () => {
       date: "2024-01-01",
       provenTotal: 0,
       zkProvenTotal: 0,
-      zkPercent: 0
+      zkPercent: null
     });
     expect(result.points[1]).toEqual({
       date: "2024-01-02",
